@@ -115,8 +115,196 @@ impl OutlineClient {
         self.post("documents.search", &request).await
     }
 
+    // ========================================================================
+    // Document Organization Operations
+    // ========================================================================
+
+    /// Archive a document
+    pub async fn archive_document(&self, id: String) -> Result<Document> {
+        let request = ArchiveDocumentRequest::new(id);
+        let response: ApiResponse<Document> = self.post("documents.archive", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to archive document"))
+    }
+
+    /// Unarchive a document
+    pub async fn unarchive_document(&self, id: String) -> Result<Document> {
+        let request = UnarchiveDocumentRequest::new(id);
+        let response: ApiResponse<Document> = self.post("documents.unarchive", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to unarchive document"))
+    }
+
+    /// Star a document
+    pub async fn star_document(&self, id: String) -> Result<Document> {
+        let request = StarDocumentRequest::new(id);
+        let response: ApiResponse<Document> = self.post("documents.star", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to star document"))
+    }
+
+    /// Unstar a document
+    pub async fn unstar_document(&self, id: String) -> Result<Document> {
+        let request = UnstarDocumentRequest::new(id);
+        let response: ApiResponse<Document> = self.post("documents.unstar", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to unstar document"))
+    }
+
+    /// Unpublish a document (convert to draft)
+    pub async fn unpublish_document(&self, id: String) -> Result<Document> {
+        let request = UnpublishDocumentRequest::new(id);
+        let response: ApiResponse<Document> = self.post("documents.unpublish", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to unpublish document"))
+    }
+
+    /// Convert a document into a template
+    pub async fn templatize_document(&self, id: String) -> Result<Document> {
+        let request = TemplatizeDocumentRequest::new(id);
+        let response: ApiResponse<Document> = self.post("documents.templatize", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to templatize document"))
+    }
+
+    /// Move a document
+    pub async fn move_document(&self, request: MoveDocumentRequest) -> Result<Document> {
+        let response: ApiResponse<Document> = self.post("documents.move", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to move document"))
+    }
+
+    /// Restore a document from trash or to a previous revision
+    pub async fn restore_document(&self, request: RestoreDocumentRequest) -> Result<Document> {
+        let response: ApiResponse<Document> = self.post("documents.restore", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to restore document"))
+    }
+
+    // ========================================================================
+    // Document Listing Variants
+    // ========================================================================
+
+    /// List recently viewed documents
+    pub async fn list_viewed_documents(&self, request: ViewedDocumentsRequest) -> Result<ListDocumentsResponse> {
+        self.post("documents.viewed", &request).await
+    }
+
+    /// List draft documents
+    pub async fn list_drafts(&self, request: DraftsRequest) -> Result<ListDocumentsResponse> {
+        self.post("documents.drafts", &request).await
+    }
+
+    /// List template documents
+    pub async fn list_templates(&self, request: TemplatesRequest) -> Result<ListDocumentsResponse> {
+        self.post("documents.templates", &request).await
+    }
+
+    // ========================================================================
+    // Document Collaboration Operations
+    // ========================================================================
+
+    /// Add a user to a document
+    pub async fn add_user_to_document(&self, request: AddUserToDocumentRequest) -> Result<()> {
+        let _response: ApiResponse<serde_json::Value> = self.post("documents.add_user", &request).await?;
+        Ok(())
+    }
+
+    /// Remove a user from a document
+    pub async fn remove_user_from_document(&self, request: RemoveUserFromDocumentRequest) -> Result<()> {
+        let _response: ApiResponse<serde_json::Value> = self.post("documents.remove_user", &request).await?;
+        Ok(())
+    }
+
+    // ========================================================================
+    // Collection Operations
+    // ========================================================================
+
     /// List collections
     pub async fn list_collections(&self, request: ListCollectionsRequest) -> Result<ListCollectionsResponse> {
         self.post("collections.list", &request).await
+    }
+
+    /// Get collection by ID
+    pub async fn get_collection(&self, id: String) -> Result<Collection> {
+        let request = CollectionInfoRequest::new(id);
+        let response: ApiResponse<Collection> = self.post("collections.info", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Collection not found"))
+    }
+
+    /// Create a new collection
+    pub async fn create_collection(&self, request: CreateCollectionRequest) -> Result<Collection> {
+        let response: ApiResponse<Collection> = self.post("collections.create", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to create collection"))
+    }
+
+    /// Update a collection
+    pub async fn update_collection(&self, request: UpdateCollectionRequest) -> Result<Collection> {
+        let response: ApiResponse<Collection> = self.post("collections.update", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to update collection"))
+    }
+
+    /// Delete a collection
+    pub async fn delete_collection(&self, id: String) -> Result<()> {
+        let request = DeleteCollectionRequest::new(id);
+        let _response: ApiResponse<serde_json::Value> = self.post("collections.delete", &request).await?;
+        Ok(())
+    }
+
+    /// Move a collection to a different position
+    pub async fn move_collection(&self, request: MoveCollectionRequest) -> Result<Collection> {
+        let response: ApiResponse<Collection> = self.post("collections.move", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to move collection"))
+    }
+
+    /// List documents in a collection
+    pub async fn list_collection_documents(&self, request: CollectionDocumentsRequest) -> Result<ListDocumentsResponse> {
+        self.post("collections.documents", &request).await
+    }
+
+    // ========================================================================
+    // Collection Member Management
+    // ========================================================================
+
+    /// Add a user to a collection
+    pub async fn add_user_to_collection(&self, request: AddUserToCollectionRequest) -> Result<()> {
+        let _response: ApiResponse<serde_json::Value> = self.post("collections.add_user", &request).await?;
+        Ok(())
+    }
+
+    /// Remove a user from a collection
+    pub async fn remove_user_from_collection(&self, request: RemoveUserFromCollectionRequest) -> Result<()> {
+        let _response: ApiResponse<serde_json::Value> = self.post("collections.remove_user", &request).await?;
+        Ok(())
+    }
+
+    /// Add a group to a collection
+    pub async fn add_group_to_collection(&self, request: AddGroupToCollectionRequest) -> Result<()> {
+        let _response: ApiResponse<serde_json::Value> = self.post("collections.add_group", &request).await?;
+        Ok(())
+    }
+
+    /// Remove a group from a collection
+    pub async fn remove_group_from_collection(&self, request: RemoveGroupFromCollectionRequest) -> Result<()> {
+        let _response: ApiResponse<serde_json::Value> = self.post("collections.remove_group", &request).await?;
+        Ok(())
+    }
+
+    /// List collection members
+    pub async fn list_collection_memberships(&self, request: CollectionMembershipsRequest) -> Result<serde_json::Value> {
+        self.post("collections.memberships", &request).await
+    }
+
+    // ========================================================================
+    // User Operations
+    // ========================================================================
+
+    /// Get user information
+    pub async fn get_user(&self, request: UserInfoRequest) -> Result<User> {
+        let response: ApiResponse<User> = self.post("users.info", &request).await?;
+        response.data.ok_or_else(|| anyhow!("User not found"))
+    }
+
+    /// Update user profile
+    pub async fn update_user(&self, request: UpdateUserRequest) -> Result<User> {
+        let response: ApiResponse<User> = self.post("users.update", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to update user"))
+    }
+
+    /// List users
+    pub async fn list_users(&self, request: ListUsersRequest) -> Result<ListUsersResponse> {
+        self.post("users.list", &request).await
     }
 }

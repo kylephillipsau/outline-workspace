@@ -33,7 +33,7 @@ pub struct PaginationResponse {
 }
 
 /// Sort direction
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SortDirection {
     Asc,
@@ -105,4 +105,25 @@ pub enum DateFilter {
     Week,
     Month,
     Year,
+}
+
+/// User filter for listing users
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum UserFilter {
+    All,
+    Admins,
+    Suspended,
+    Active,
+    Invited,
+}
+
+/// User sort field
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UserSort {
+    Name,
+    Email,
+    LastActive,
+    CreatedAt,
 }

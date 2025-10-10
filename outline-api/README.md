@@ -72,8 +72,9 @@ auth::delete_api_token()?;
 
 ## API Client Methods
 
-### Documents
+### Documents (19 operations)
 
+**Core Operations:**
 - `list_documents()` - List documents with optional filters
 - `get_document()` - Get a specific document by ID
 - `create_document()` - Create a new document
@@ -81,10 +82,50 @@ auth::delete_api_token()?;
 - `delete_document()` - Delete or archive a document
 - `search_documents()` - Search documents by query
 
-### Collections
+**Organization:**
+- `archive_document()` - Archive a document
+- `unarchive_document()` - Restore from archive
+- `star_document()` - Star a document for quick access
+- `unstar_document()` - Remove star from a document
+- `unpublish_document()` - Convert published document to draft
+- `templatize_document()` - Convert document into a template
+- `move_document()` - Move document to different collection/parent
+- `restore_document()` - Restore from trash or to previous revision
 
+**Listing Variants:**
+- `list_viewed_documents()` - List recently viewed documents
+- `list_drafts()` - List draft documents
+- `list_templates()` - List template documents
+
+**Collaboration:**
+- `add_user_to_document()` - Grant user access to document
+- `remove_user_from_document()` - Revoke user access from document
+
+### Collections (12 operations)
+
+**Core Operations:**
 - `list_collections()` - List all collections
-- More collection operations coming soon
+- `get_collection()` - Get collection by ID
+- `create_collection()` - Create a new collection
+- `update_collection()` - Update collection properties
+- `delete_collection()` - Delete a collection
+
+**Organization:**
+- `move_collection()` - Move collection to different position
+- `list_collection_documents()` - List documents in a collection
+
+**Member Management:**
+- `add_user_to_collection()` - Add user to collection
+- `remove_user_from_collection()` - Remove user from collection
+- `add_group_to_collection()` - Add group to collection
+- `remove_group_from_collection()` - Remove group from collection
+- `list_collection_memberships()` - List collection members
+
+### Users (3 operations)
+
+- `get_user()` - Get user information (current or by ID)
+- `update_user()` - Update user profile
+- `list_users()` - List all users with filters
 
 ## Types
 

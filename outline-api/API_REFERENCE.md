@@ -1643,27 +1643,44 @@ async fn test_document_lifecycle() {
 
 ## Roadmap
 
-### Version 0.1.0 (Phase 1)
+### Version 0.1.0 (Phase 1) - COMPLETED ✅
 - ✅ Basic client architecture
 - ✅ Authentication support
 - ✅ Type definitions for core resources
-- ⏳ Documents API (in progress)
-- ⏳ Collections API (in progress)
+- ✅ Modular type system with builder patterns
+- ✅ Documents API - Core operations (6/28)
+- ✅ Collections API - Basic listing (1/18)
 
-### Version 0.2.0 (Phase 2)
-- Users API
-- Comments API
-- Groups API
-- Shares API
-- Attachments API
+### Version 0.2.0 (Phase 2) - IN PROGRESS ⏳
+- ✅ Documents API - Organization operations (19/28 total)
+  - ✅ Archive, unarchive, star, unstar, unpublish, templatize
+  - ✅ Move, restore
+  - ✅ List variants: viewed, drafts, templates
+  - ✅ Collaboration: add_user, remove_user
+  - ⏸️ Import/export (deferred - file handling complexity)
 
-### Version 0.3.0 (Phase 3)
-- Notifications API
-- Events API
-- Teams API
-- Complete test coverage
+- ✅ Collections API - Extended operations (12/18 total)
+  - ✅ CRUD: create, info, update, delete
+  - ✅ Organization: move, list documents
+  - ✅ Member management: add/remove users, add/remove groups, list memberships
+  - ⏸️ Export operations (deferred - file handling complexity)
 
-### Version 0.4.0 (Phase 4)
+- ✅ Users API - Basic operations (3/15)
+  - ✅ Profile: info, update
+  - ✅ Administration: list
+  - ⏸️ Advanced admin ops (deferred to Phase 3)
+
+**Phase 2 Status: 34/61 operations (56%) - Essential operations complete**
+
+### Version 0.3.0 (Phase 3) - PLANNED
+- Comments API (8 operations)
+- Groups API (9 operations)
+- Shares API (6 operations)
+- Attachments API (5 operations)
+- Users API - Admin operations (suspend, activate, delete, promote, demote, invite)
+- Complete test coverage for all operations
+
+### Version 0.4.0 (Phase 4) - FUTURE
 - WebSocket support (optional feature)
 - CRDT synchronization (optional feature)
 - Presence awareness
