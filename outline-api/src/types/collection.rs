@@ -407,6 +407,90 @@ impl CollectionMembershipsRequest {
 }
 
 // ============================================================================
+// Export/Import Operations Request Types
+// ============================================================================
+
+/// Request to export a collection
+#[derive(Debug, Clone, Serialize)]
+pub struct ExportCollectionRequest {
+    pub id: String,
+    pub format: super::common::ExportFormat,
+}
+
+impl ExportCollectionRequest {
+    pub fn new(id: String, format: super::common::ExportFormat) -> Self {
+        Self { id, format }
+    }
+}
+
+/// Request to export all collections
+#[derive(Debug, Clone, Serialize)]
+pub struct ExportAllCollectionsRequest {
+    pub format: super::common::ExportFormat,
+}
+
+impl ExportAllCollectionsRequest {
+    pub fn new(format: super::common::ExportFormat) -> Self {
+        Self { format }
+    }
+}
+
+/// Request to import a file into a collection
+#[derive(Debug, Clone, Serialize)]
+pub struct ImportFileToCollectionRequest {
+    pub id: String,
+    #[serde(skip)]
+    pub file: Vec<u8>,
+    pub format: super::common::ImportFormat,
+}
+
+impl ImportFileToCollectionRequest {
+    pub fn new(id: String, file: Vec<u8>, format: super::common::ImportFormat) -> Self {
+        Self { id, file, format }
+    }
+
+    pub fn builder(id: String) -> ImportFileToCollectionRequestBuilder {
+        ImportFileToCollectionRequestBuilder::new(id)
+    }
+}
+
+/// Builder for ImportFileToCollectionRequest
+#[derive(Debug)]
+pub struct ImportFileToCollectionRequestBuilder {
+    id: String,
+    file: Option<Vec<u8>>,
+    format: Option<super::common::ImportFormat>,
+}
+
+impl ImportFileToCollectionRequestBuilder {
+    pub fn new(id: String) -> Self {
+        Self {
+            id,
+            file: None,
+            format: None,
+        }
+    }
+
+    pub fn file(mut self, file: Vec<u8>) -> Self {
+        self.file = Some(file);
+        self
+    }
+
+    pub fn format(mut self, format: super::common::ImportFormat) -> Self {
+        self.format = Some(format);
+        self
+    }
+
+    pub fn build(self) -> ImportFileToCollectionRequest {
+        ImportFileToCollectionRequest {
+            id: self.id,
+            file: self.file.expect("file is required"),
+            format: self.format.expect("format is required"),
+        }
+    }
+}
+
+// ============================================================================
 // Unit Tests
 // ============================================================================
 
@@ -933,5 +1017,360 @@ mod tests {
         let json = serde_json::to_string(&req).unwrap();
         // Verify it serializes without errors
         assert!(json.len() > 0);
+    }
+
+    // ========================================================================
+    // Export/Import Operations Tests
+    // ========================================================================
+
+    #[test]
+    fn test_export_collection_request_new() {
+        use crate::types::common::ExportFormat;
+        let req = ExportCollectionRequest::new("col123".to_string(), ExportFormat::Markdown);
+        assert_eq!(req.id, "col123");
+        assert!(matches!(req.format, ExportFormat::Markdown));
+    }
+
+    #[test]
+    fn test_export_collection_request_serialization() {
+        use crate::types::common::ExportFormat;
+        let req = ExportCollectionRequest::new("col123".to_string(), ExportFormat::Html);
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"id\":\"col123\""));
+        assert!(json.contains("\"format\":\"html\""));
+    }
+
+    #[test]
+    fn test_export_collection_request_all_formats() {
+        use crate::types::common::ExportFormat;
+
+        let md_req = ExportCollectionRequest::new("col1".to_string(), ExportFormat::Markdown);
+        let html_req = ExportCollectionRequest::new("col1".to_string(), ExportFormat::Html);
+        let pdf_req = ExportCollectionRequest::new("col1".to_string(), ExportFormat::Pdf);
+
+        assert!(matches!(md_req.format, ExportFormat::Markdown));
+        assert!(matches!(html_req.format, ExportFormat::Html));
+        assert!(matches!(pdf_req.format, ExportFormat::Pdf));
+    }
+
+    #[test]
+    fn test_export_collection_request_format_serialization() {
+        use crate::types::common::ExportFormat;
+
+        let req = ExportCollectionRequest::new("col1".to_string(), ExportFormat::Markdown);
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"format\":\"markdown\""));
+
+        let req = ExportCollectionRequest::new("col1".to_string(), ExportFormat::Html);
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"format\":\"html\""));
+
+        let req = ExportCollectionRequest::new("col1".to_string(), ExportFormat::Pdf);
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"format\":\"pdf\""));
+    }
+
+    #[test]
+    fn test_export_all_collections_request_new() {
+        use crate::types::common::ExportFormat;
+        let req = ExportAllCollectionsRequest::new(ExportFormat::Markdown);
+        assert!(matches!(req.format, ExportFormat::Markdown));
+    }
+
+    #[test]
+    fn test_export_all_collections_request_serialization() {
+        use crate::types::common::ExportFormat;
+        let req = ExportAllCollectionsRequest::new(ExportFormat::Html);
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"format\":\"html\""));
+    }
+
+    #[test]
+    fn test_export_all_collections_request_all_formats() {
+        use crate::types::common::ExportFormat;
+
+        let md_req = ExportAllCollectionsRequest::new(ExportFormat::Markdown);
+        let html_req = ExportAllCollectionsRequest::new(ExportFormat::Html);
+        let pdf_req = ExportAllCollectionsRequest::new(ExportFormat::Pdf);
+
+        assert!(matches!(md_req.format, ExportFormat::Markdown));
+        assert!(matches!(html_req.format, ExportFormat::Html));
+        assert!(matches!(pdf_req.format, ExportFormat::Pdf));
+    }
+
+    #[test]
+    fn test_import_file_to_collection_request_new() {
+        use crate::types::common::ImportFormat;
+        let file_data = vec![1, 2, 3, 4, 5];
+        let req = ImportFileToCollectionRequest::new(
+            "col123".to_string(),
+            file_data.clone(),
+            ImportFormat::Markdown,
+        );
+        assert_eq!(req.id, "col123");
+        assert_eq!(req.file, file_data);
+        assert!(matches!(req.format, ImportFormat::Markdown));
+    }
+
+    #[test]
+    fn test_import_file_to_collection_request_builder() {
+        use crate::types::common::ImportFormat;
+        let file_data = vec![10, 20, 30];
+        let req = ImportFileToCollectionRequest::builder("col456".to_string())
+            .file(file_data.clone())
+            .format(ImportFormat::Html)
+            .build();
+
+        assert_eq!(req.id, "col456");
+        assert_eq!(req.file, file_data);
+        assert!(matches!(req.format, ImportFormat::Html));
+    }
+
+    #[test]
+    fn test_import_file_to_collection_request_all_formats() {
+        use crate::types::common::ImportFormat;
+        let file_data = vec![1, 2, 3];
+
+        let md_req = ImportFileToCollectionRequest::new(
+            "col1".to_string(),
+            file_data.clone(),
+            ImportFormat::Markdown,
+        );
+        let html_req = ImportFileToCollectionRequest::new(
+            "col1".to_string(),
+            file_data.clone(),
+            ImportFormat::Html,
+        );
+        let docx_req = ImportFileToCollectionRequest::new(
+            "col1".to_string(),
+            file_data.clone(),
+            ImportFormat::Docx,
+        );
+        let notion_req = ImportFileToCollectionRequest::new(
+            "col1".to_string(),
+            file_data.clone(),
+            ImportFormat::Notion,
+        );
+        let confluence_req = ImportFileToCollectionRequest::new(
+            "col1".to_string(),
+            file_data.clone(),
+            ImportFormat::Confluence,
+        );
+
+        assert!(matches!(md_req.format, ImportFormat::Markdown));
+        assert!(matches!(html_req.format, ImportFormat::Html));
+        assert!(matches!(docx_req.format, ImportFormat::Docx));
+        assert!(matches!(notion_req.format, ImportFormat::Notion));
+        assert!(matches!(confluence_req.format, ImportFormat::Confluence));
+    }
+
+    #[test]
+    fn test_import_file_to_collection_request_serialization() {
+        use crate::types::common::ImportFormat;
+        let file_data = vec![1, 2, 3, 4, 5];
+        let req = ImportFileToCollectionRequest::new(
+            "col123".to_string(),
+            file_data.clone(),
+            ImportFormat::Docx,
+        );
+
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"id\":\"col123\""));
+        assert!(json.contains("\"format\":\"docx\""));
+        // File data should be skipped in serialization
+        assert!(!json.contains("file"));
+    }
+
+    #[test]
+    fn test_import_file_to_collection_request_file_skipped() {
+        use crate::types::common::ImportFormat;
+        let file_data = vec![100, 200, 250];
+        let req = ImportFileToCollectionRequest::new(
+            "col123".to_string(),
+            file_data,
+            ImportFormat::Notion,
+        );
+
+        let json = serde_json::to_string(&req).unwrap();
+        // Verify file field is not serialized
+        assert!(!json.contains("\"file\""));
+    }
+
+    #[test]
+    fn test_import_file_to_collection_request_empty_file() {
+        use crate::types::common::ImportFormat;
+        let req = ImportFileToCollectionRequest::new(
+            "col789".to_string(),
+            vec![],
+            ImportFormat::Markdown,
+        );
+        assert_eq!(req.file.len(), 0);
+    }
+
+    #[test]
+    fn test_import_file_to_collection_request_large_file() {
+        use crate::types::common::ImportFormat;
+        let large_file = vec![0u8; 1_000_000]; // 1MB
+        let req = ImportFileToCollectionRequest::new(
+            "col999".to_string(),
+            large_file.clone(),
+            ImportFormat::Html,
+        );
+        assert_eq!(req.file.len(), 1_000_000);
+        assert_eq!(req.file, large_file);
+    }
+
+    #[test]
+    #[should_panic(expected = "file is required")]
+    fn test_import_file_to_collection_request_builder_missing_file() {
+        use crate::types::common::ImportFormat;
+        ImportFileToCollectionRequest::builder("col123".to_string())
+            .format(ImportFormat::Markdown)
+            .build();
+    }
+
+    #[test]
+    #[should_panic(expected = "format is required")]
+    fn test_import_file_to_collection_request_builder_missing_format() {
+        ImportFileToCollectionRequest::builder("col123".to_string())
+            .file(vec![1, 2, 3])
+            .build();
+    }
+
+    #[test]
+    fn test_import_file_to_collection_request_builder_method_chaining() {
+        use crate::types::common::ImportFormat;
+        let file_data = vec![5, 10, 15, 20];
+        let req = ImportFileToCollectionRequest::builder("col888".to_string())
+            .format(ImportFormat::Confluence)
+            .file(file_data.clone())
+            .build();
+
+        assert_eq!(req.id, "col888");
+        assert_eq!(req.file, file_data);
+        assert!(matches!(req.format, ImportFormat::Confluence));
+    }
+
+    #[test]
+    fn test_import_format_serialization() {
+        use crate::types::common::ImportFormat;
+
+        let req = ImportFileToCollectionRequest::new(
+            "col1".to_string(),
+            vec![1],
+            ImportFormat::Markdown,
+        );
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"format\":\"markdown\""));
+
+        let req = ImportFileToCollectionRequest::new(
+            "col1".to_string(),
+            vec![1],
+            ImportFormat::Html,
+        );
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"format\":\"html\""));
+
+        let req = ImportFileToCollectionRequest::new(
+            "col1".to_string(),
+            vec![1],
+            ImportFormat::Docx,
+        );
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"format\":\"docx\""));
+
+        let req = ImportFileToCollectionRequest::new(
+            "col1".to_string(),
+            vec![1],
+            ImportFormat::Notion,
+        );
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"format\":\"notion\""));
+
+        let req = ImportFileToCollectionRequest::new(
+            "col1".to_string(),
+            vec![1],
+            ImportFormat::Confluence,
+        );
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"format\":\"confluence\""));
+    }
+
+    #[test]
+    fn test_export_collection_edge_cases() {
+        use crate::types::common::ExportFormat;
+
+        // Empty string ID
+        let req = ExportCollectionRequest::new("".to_string(), ExportFormat::Markdown);
+        assert_eq!(req.id, "");
+
+        // Unicode ID
+        let req = ExportCollectionRequest::new("📚col".to_string(), ExportFormat::Html);
+        assert_eq!(req.id, "📚col");
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.len() > 0);
+    }
+
+    #[test]
+    fn test_export_all_collections_edge_cases() {
+        use crate::types::common::ExportFormat;
+
+        // Just verify all formats work
+        for format in [ExportFormat::Markdown, ExportFormat::Html, ExportFormat::Pdf] {
+            let req = ExportAllCollectionsRequest::new(format);
+            let json = serde_json::to_string(&req).unwrap();
+            assert!(json.len() > 0);
+        }
+    }
+
+    #[test]
+    fn test_import_file_binary_data() {
+        use crate::types::common::ImportFormat;
+
+        // Test with binary data (not UTF-8)
+        let binary_data = vec![0xFF, 0xFE, 0xFD, 0xFC];
+        let req = ImportFileToCollectionRequest::new(
+            "col123".to_string(),
+            binary_data.clone(),
+            ImportFormat::Docx,
+        );
+        assert_eq!(req.file, binary_data);
+    }
+
+    #[test]
+    fn test_import_file_utf8_data() {
+        use crate::types::common::ImportFormat;
+
+        // Test with UTF-8 text data
+        let text = "# Hello World\n\nTest document".as_bytes().to_vec();
+        let req = ImportFileToCollectionRequest::new(
+            "col123".to_string(),
+            text.clone(),
+            ImportFormat::Markdown,
+        );
+        assert_eq!(req.file, text);
+        assert_eq!(String::from_utf8(req.file).unwrap(), "# Hello World\n\nTest document");
+    }
+
+    #[test]
+    fn test_all_export_import_types_are_cloneable() {
+        use crate::types::common::{ExportFormat, ImportFormat};
+
+        let export_req = ExportCollectionRequest::new("col1".to_string(), ExportFormat::Markdown);
+        let export_req_clone = export_req.clone();
+        assert_eq!(export_req.id, export_req_clone.id);
+
+        let export_all_req = ExportAllCollectionsRequest::new(ExportFormat::Html);
+        let export_all_req_clone = export_all_req.clone();
+        assert!(matches!(export_all_req_clone.format, ExportFormat::Html));
+
+        let import_req = ImportFileToCollectionRequest::new(
+            "col1".to_string(),
+            vec![1, 2, 3],
+            ImportFormat::Docx,
+        );
+        let import_req_clone = import_req.clone();
+        assert_eq!(import_req.id, import_req_clone.id);
+        assert_eq!(import_req.file, import_req_clone.file);
     }
 }

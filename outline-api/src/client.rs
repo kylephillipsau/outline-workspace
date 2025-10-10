@@ -209,6 +209,109 @@ impl OutlineClient {
     }
 
     // ========================================================================
+    // Document Import/Export Operations
+    // ========================================================================
+
+    /// Import a document from external formats (Markdown, HTML, Docx, Notion, Confluence)
+    pub async fn import_document(&self, request: ImportDocumentRequest) -> Result<Document> {
+        let url = format!("{}/{}", self.base_url, "documents.import");
+
+        let mut headers = HeaderMap::new();
+
+        if let Some(token) = &self.api_token {
+            let auth_value = format!("Bearer {}", token);
+            headers.insert(
+                AUTHORIZATION,
+                HeaderValue::from_str(&auth_value)
+                    .context("Failed to create authorization header")?,
+            );
+        }
+
+        // Create multipart form for file upload
+        let file_part = reqwest::multipart::Part::bytes(request.file)
+            .file_name("import.file");
+
+        let mut form = reqwest::multipart::Form::new()
+            .text("collectionId", request.collection_id.clone())
+            .part("file", file_part);
+
+        if let Some(parent_id) = request.parent_document_id {
+            form = form.text("parentDocumentId", parent_id);
+        }
+
+        if let Some(publish) = request.publish {
+            form = form.text("publish", publish.to_string());
+        }
+
+        let response = self
+            .client
+            .post(&url)
+            .headers(headers)
+            .multipart(form)
+            .send()
+            .await
+            .context("Failed to send import request")?;
+
+        let status = response.status();
+        let body = response.text().await.context("Failed to read response")?;
+
+        if !status.is_success() {
+            return Err(anyhow!(
+                "Import request failed with status {}: {}",
+                status,
+                body
+            ));
+        }
+
+        let api_response: ApiResponse<Document> = serde_json::from_str(&body)
+            .context("Failed to parse import response")?;
+
+        api_response.data.ok_or_else(|| anyhow!("Failed to import document"))
+    }
+
+    /// Export a document in various formats (Markdown, HTML, PDF)
+    pub async fn export_document(&self, request: ExportDocumentRequest) -> Result<Vec<u8>> {
+        let url = format!("{}/{}", self.base_url, "documents.export");
+
+        let mut headers = HeaderMap::new();
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+
+        if let Some(token) = &self.api_token {
+            let auth_value = format!("Bearer {}", token);
+            headers.insert(
+                AUTHORIZATION,
+                HeaderValue::from_str(&auth_value)
+                    .context("Failed to create authorization header")?,
+            );
+        }
+
+        let response = self
+            .client
+            .post(&url)
+            .headers(headers)
+            .json(&request)
+            .send()
+            .await
+            .context("Failed to send export request")?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.context("Failed to read error response")?;
+            return Err(anyhow!(
+                "Export request failed with status {}: {}",
+                status,
+                body
+            ));
+        }
+
+        response
+            .bytes()
+            .await
+            .context("Failed to read export data")
+            .map(|b| b.to_vec())
+    }
+
+    // ========================================================================
     // Collection Operations
     // ========================================================================
 
@@ -285,6 +388,141 @@ impl OutlineClient {
     /// List collection members
     pub async fn list_collection_memberships(&self, request: CollectionMembershipsRequest) -> Result<serde_json::Value> {
         self.post("collections.memberships", &request).await
+    }
+
+    // ========================================================================
+    // Collection Export/Import Operations
+    // ========================================================================
+
+    /// Export a collection in the specified format
+    pub async fn export_collection(&self, request: ExportCollectionRequest) -> Result<Vec<u8>> {
+        let url = format!("{}/{}", self.base_url, "collections.export");
+
+        let mut headers = HeaderMap::new();
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+
+        if let Some(token) = &self.api_token {
+            let auth_value = format!("Bearer {}", token);
+            headers.insert(
+                AUTHORIZATION,
+                HeaderValue::from_str(&auth_value)
+                    .context("Failed to create authorization header")?,
+            );
+        }
+
+        let response = self
+            .client
+            .post(&url)
+            .headers(headers)
+            .json(&request)
+            .send()
+            .await
+            .context("Failed to send export request")?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.context("Failed to read error response")?;
+            return Err(anyhow!(
+                "Export request failed with status {}: {}",
+                status,
+                body
+            ));
+        }
+
+        response
+            .bytes()
+            .await
+            .context("Failed to read export data")
+            .map(|b| b.to_vec())
+    }
+
+    /// Export all collections in the specified format
+    pub async fn export_all_collections(&self, request: ExportAllCollectionsRequest) -> Result<Vec<u8>> {
+        let url = format!("{}/{}", self.base_url, "collections.export_all");
+
+        let mut headers = HeaderMap::new();
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+
+        if let Some(token) = &self.api_token {
+            let auth_value = format!("Bearer {}", token);
+            headers.insert(
+                AUTHORIZATION,
+                HeaderValue::from_str(&auth_value)
+                    .context("Failed to create authorization header")?,
+            );
+        }
+
+        let response = self
+            .client
+            .post(&url)
+            .headers(headers)
+            .json(&request)
+            .send()
+            .await
+            .context("Failed to send export all request")?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let body = response.text().await.context("Failed to read error response")?;
+            return Err(anyhow!(
+                "Export all request failed with status {}: {}",
+                status,
+                body
+            ));
+        }
+
+        response
+            .bytes()
+            .await
+            .context("Failed to read export data")
+            .map(|b| b.to_vec())
+    }
+
+    /// Import a file into a collection
+    pub async fn import_file_to_collection(&self, request: ImportFileToCollectionRequest) -> Result<serde_json::Value> {
+        let url = format!("{}/{}", self.base_url, "collections.import_file");
+
+        let mut headers = HeaderMap::new();
+
+        if let Some(token) = &self.api_token {
+            let auth_value = format!("Bearer {}", token);
+            headers.insert(
+                AUTHORIZATION,
+                HeaderValue::from_str(&auth_value)
+                    .context("Failed to create authorization header")?,
+            );
+        }
+
+        // Create multipart form for file upload
+        let file_part = reqwest::multipart::Part::bytes(request.file)
+            .file_name("import.file");
+
+        let form = reqwest::multipart::Form::new()
+            .text("id", request.id)
+            .text("format", format!("{:?}", request.format).to_lowercase())
+            .part("file", file_part);
+
+        let response = self
+            .client
+            .post(&url)
+            .headers(headers)
+            .multipart(form)
+            .send()
+            .await
+            .context("Failed to send import request")?;
+
+        let status = response.status();
+        let body = response.text().await.context("Failed to read response")?;
+
+        if !status.is_success() {
+            return Err(anyhow!(
+                "Import request failed with status {}: {}",
+                status,
+                body
+            ));
+        }
+
+        serde_json::from_str(&body).context("Failed to parse import response")
     }
 
     // ========================================================================

@@ -72,7 +72,7 @@ auth::delete_api_token()?;
 
 ## API Client Methods
 
-### Documents (19 operations)
+### Documents (21 operations)
 
 **Core Operations:**
 - `list_documents()` - List documents with optional filters
@@ -97,11 +97,15 @@ auth::delete_api_token()?;
 - `list_drafts()` - List draft documents
 - `list_templates()` - List template documents
 
+**Import/Export:**
+- `import_document()` - Import document from external formats (Markdown, HTML, Docx, Notion, Confluence)
+- `export_document()` - Export document to Markdown, HTML, or PDF
+
 **Collaboration:**
 - `add_user_to_document()` - Grant user access to document
 - `remove_user_from_document()` - Revoke user access from document
 
-### Collections (12 operations)
+### Collections (15 operations)
 
 **Core Operations:**
 - `list_collections()` - List all collections
@@ -113,6 +117,11 @@ auth::delete_api_token()?;
 **Organization:**
 - `move_collection()` - Move collection to different position
 - `list_collection_documents()` - List documents in a collection
+
+**Import/Export:**
+- `export_collection()` - Export collection to Markdown, HTML, or PDF
+- `export_all_collections()` - Export all collections to Markdown, HTML, or PDF
+- `import_file_to_collection()` - Import files into collection (Markdown, HTML, Docx, Notion, Confluence)
 
 **Member Management:**
 - `add_user_to_collection()` - Add user to collection

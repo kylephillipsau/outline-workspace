@@ -1651,26 +1651,29 @@ async fn test_document_lifecycle() {
 - ✅ Documents API - Core operations (6/28)
 - ✅ Collections API - Basic listing (1/18)
 
-### Version 0.2.0 (Phase 2) - IN PROGRESS ⏳
-- ✅ Documents API - Organization operations (19/28 total)
-  - ✅ Archive, unarchive, star, unstar, unpublish, templatize
-  - ✅ Move, restore
-  - ✅ List variants: viewed, drafts, templates
-  - ✅ Collaboration: add_user, remove_user
-  - ⏸️ Import/export (deferred - file handling complexity)
-
-- ✅ Collections API - Extended operations (12/18 total)
+### Version 0.2.0 (Phase 2) - COMPLETED ✅
+- ✅ Documents API - All essential operations (21/28 total)
   - ✅ CRUD: create, info, update, delete
-  - ✅ Organization: move, list documents
-  - ✅ Member management: add/remove users, add/remove groups, list memberships
-  - ⏸️ Export operations (deferred - file handling complexity)
+  - ✅ Search and listing: list, search, viewed, drafts, templates
+  - ✅ Organization: archive, unarchive, star, unstar, unpublish, templatize, move, restore
+  - ✅ Import/Export: import (Markdown, HTML, Docx, Notion, Confluence), export (Markdown, HTML, PDF)
+  - ✅ Collaboration: add_user, remove_user
 
-- ✅ Users API - Admin operations (9/15)
+- ✅ Collections API - All essential operations (15/18 total)
+  - ✅ CRUD: create, info, update, delete, list
+  - ✅ Organization: move, list documents
+  - ✅ Import/Export: export, export_all, import_file (Markdown, HTML, Docx, Notion, Confluence, PDF)
+  - ✅ Member management: add/remove users, add/remove groups, list memberships
+
+- ✅ Users API - Core operations (9/15)
   - ✅ Profile: info, update
   - ✅ Administration: list, suspend, activate, delete, promote, demote, invite
   - ⏸️ Notification preferences (deferred to Phase 3)
 
-**Phase 2 Status: 40/61 operations (66%) - Core operations complete**
+**Phase 2 Status: 45/61 operations (74%) - All essential operations complete**
+- 225 comprehensive unit tests
+- Complete type safety with builder patterns
+- Full import/export support with multipart file handling
 
 ### Version 0.3.0 (Phase 3) - PLANNED
 - Comments API (8 operations)
