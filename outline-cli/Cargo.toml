@@ -1,0 +1,49 @@
+[package]
+name = "outline-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "outline-cli"
+path = "src/main.rs"
+
+[dependencies]
+# Shared API library
+outline-api = { path = "../outline-api" }
+
+# HTTP client (still needed for OAuth flow)
+reqwest = { workspace = true }
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# CLI
+clap = { version = "4", features = ["derive", "env"] }
+
+# OAuth2
+oauth2 = "5.0"
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Configuration
+config = { workspace = true }
+toml = { workspace = true }
+
+# Secure credential storage (for config file management)
+keyring = { version = "3", features = ["windows-native"] }
+
+# Directory management
+dirs = { workspace = true }
+
+# URL parsing
+url = { workspace = true }
+
+# Async utilities
+futures = { workspace = true }
+
+# Compile-time data structures
+phf = { version = "0.13", features = ["macros"] }
