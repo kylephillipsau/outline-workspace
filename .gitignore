@@ -15,3 +15,6 @@ Thumbs.db
 
 # Local configuration (contains sensitive data)
 .outline-cli/
+
+# TUI logs
+outline-tui.log
