@@ -121,11 +121,20 @@ auth::delete_api_token()?;
 - `remove_group_from_collection()` - Remove group from collection
 - `list_collection_memberships()` - List collection members
 
-### Users (3 operations)
+### Users (9 operations)
 
+**Profile Operations:**
 - `get_user()` - Get user information (current or by ID)
 - `update_user()` - Update user profile
 - `list_users()` - List all users with filters
+
+**Admin Operations:**
+- `suspend_user()` - Suspend a user account
+- `activate_user()` - Activate a suspended user
+- `delete_user()` - Delete a user account
+- `promote_user()` - Promote user to admin
+- `demote_user()` - Demote admin to regular user
+- `invite_user()` - Invite new user to team
 
 ## Types
 

@@ -1665,19 +1665,19 @@ async fn test_document_lifecycle() {
   - ✅ Member management: add/remove users, add/remove groups, list memberships
   - ⏸️ Export operations (deferred - file handling complexity)
 
-- ✅ Users API - Basic operations (3/15)
+- ✅ Users API - Admin operations (9/15)
   - ✅ Profile: info, update
-  - ✅ Administration: list
-  - ⏸️ Advanced admin ops (deferred to Phase 3)
+  - ✅ Administration: list, suspend, activate, delete, promote, demote, invite
+  - ⏸️ Notification preferences (deferred to Phase 3)
 
-**Phase 2 Status: 34/61 operations (56%) - Essential operations complete**
+**Phase 2 Status: 40/61 operations (66%) - Core operations complete**
 
 ### Version 0.3.0 (Phase 3) - PLANNED
 - Comments API (8 operations)
 - Groups API (9 operations)
 - Shares API (6 operations)
 - Attachments API (5 operations)
-- Users API - Admin operations (suspend, activate, delete, promote, demote, invite)
+- Users API - Notification preferences (2 operations)
 - Complete test coverage for all operations
 
 ### Version 0.4.0 (Phase 4) - FUTURE

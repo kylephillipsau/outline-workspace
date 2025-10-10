@@ -235,6 +235,95 @@ pub struct ListUsersResponse {
     pub pagination: Option<PaginationResponse>,
 }
 
+// ============================================================================
+// Admin Operations Request Types
+// ============================================================================
+
+/// Request to suspend a user
+#[derive(Debug, Clone, Serialize)]
+pub struct SuspendUserRequest {
+    pub id: String,
+}
+
+impl SuspendUserRequest {
+    pub fn new(id: String) -> Self {
+        Self { id }
+    }
+}
+
+/// Request to activate a suspended user
+#[derive(Debug, Clone, Serialize)]
+pub struct ActivateUserRequest {
+    pub id: String,
+}
+
+impl ActivateUserRequest {
+    pub fn new(id: String) -> Self {
+        Self { id }
+    }
+}
+
+/// Request to delete a user
+#[derive(Debug, Clone, Serialize)]
+pub struct DeleteUserRequest {
+    pub id: String,
+}
+
+impl DeleteUserRequest {
+    pub fn new(id: String) -> Self {
+        Self { id }
+    }
+}
+
+/// Request to promote a user to admin
+#[derive(Debug, Clone, Serialize)]
+pub struct PromoteUserRequest {
+    pub id: String,
+}
+
+impl PromoteUserRequest {
+    pub fn new(id: String) -> Self {
+        Self { id }
+    }
+}
+
+/// Request to demote an admin to regular user
+#[derive(Debug, Clone, Serialize)]
+pub struct DemoteUserRequest {
+    pub id: String,
+}
+
+impl DemoteUserRequest {
+    pub fn new(id: String) -> Self {
+        Self { id }
+    }
+}
+
+/// Request to invite a new user to the team
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InviteUserRequest {
+    pub email: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<super::common::UserRole>,
+}
+
+impl InviteUserRequest {
+    pub fn new(email: String, name: String) -> Self {
+        Self {
+            email,
+            name,
+            role: None,
+        }
+    }
+
+    pub fn with_role(mut self, role: super::common::UserRole) -> Self {
+        self.role = Some(role);
+        self
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -736,5 +825,183 @@ mod tests {
             .build();
         let req2 = req1.clone();
         assert_eq!(req1.query, req2.query);
+    }
+
+    // ========================================================================
+    // Admin Operations Tests
+    // ========================================================================
+
+    #[test]
+    fn test_suspend_user_request_new() {
+        let req = SuspendUserRequest::new("user123".to_string());
+        assert_eq!(req.id, "user123");
+    }
+
+    #[test]
+    fn test_suspend_user_request_serialization() {
+        let req = SuspendUserRequest::new("user456".to_string());
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"id\":\"user456\""));
+    }
+
+    #[test]
+    fn test_activate_user_request_new() {
+        let req = ActivateUserRequest::new("user789".to_string());
+        assert_eq!(req.id, "user789");
+    }
+
+    #[test]
+    fn test_activate_user_request_serialization() {
+        let req = ActivateUserRequest::new("user101".to_string());
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"id\":\"user101\""));
+    }
+
+    #[test]
+    fn test_delete_user_request_new() {
+        let req = DeleteUserRequest::new("user202".to_string());
+        assert_eq!(req.id, "user202");
+    }
+
+    #[test]
+    fn test_delete_user_request_serialization() {
+        let req = DeleteUserRequest::new("user303".to_string());
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"id\":\"user303\""));
+    }
+
+    #[test]
+    fn test_promote_user_request_new() {
+        let req = PromoteUserRequest::new("user404".to_string());
+        assert_eq!(req.id, "user404");
+    }
+
+    #[test]
+    fn test_promote_user_request_serialization() {
+        let req = PromoteUserRequest::new("user505".to_string());
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"id\":\"user505\""));
+    }
+
+    #[test]
+    fn test_demote_user_request_new() {
+        let req = DemoteUserRequest::new("user606".to_string());
+        assert_eq!(req.id, "user606");
+    }
+
+    #[test]
+    fn test_demote_user_request_serialization() {
+        let req = DemoteUserRequest::new("user707".to_string());
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"id\":\"user707\""));
+    }
+
+    #[test]
+    fn test_invite_user_request_new() {
+        let req = InviteUserRequest::new(
+            "newuser@example.com".to_string(),
+            "New User".to_string(),
+        );
+        assert_eq!(req.email, "newuser@example.com");
+        assert_eq!(req.name, "New User");
+        assert!(req.role.is_none());
+    }
+
+    #[test]
+    fn test_invite_user_request_with_role() {
+        let req = InviteUserRequest::new(
+            "admin@example.com".to_string(),
+            "Admin User".to_string(),
+        )
+        .with_role(crate::types::common::UserRole::Admin);
+
+        assert_eq!(req.email, "admin@example.com");
+        assert_eq!(req.name, "Admin User");
+        assert!(matches!(req.role, Some(crate::types::common::UserRole::Admin)));
+    }
+
+    #[test]
+    fn test_invite_user_request_serialization() {
+        let req = InviteUserRequest::new(
+            "test@example.com".to_string(),
+            "Test User".to_string(),
+        );
+
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"email\":\"test@example.com\""));
+        assert!(json.contains("\"name\":\"Test User\""));
+        assert!(!json.contains("\"role\""));
+    }
+
+    #[test]
+    fn test_invite_user_request_serialization_with_role() {
+        let req = InviteUserRequest::new(
+            "member@example.com".to_string(),
+            "Team Member".to_string(),
+        )
+        .with_role(crate::types::common::UserRole::Member);
+
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"email\":\"member@example.com\""));
+        assert!(json.contains("\"name\":\"Team Member\""));
+        assert!(json.contains("\"role\":\"member\""));
+    }
+
+    #[test]
+    fn test_invite_user_request_serialization_with_viewer_role() {
+        let req = InviteUserRequest::new(
+            "viewer@example.com".to_string(),
+            "Viewer User".to_string(),
+        )
+        .with_role(crate::types::common::UserRole::Viewer);
+
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"role\":\"viewer\""));
+    }
+
+    #[test]
+    fn test_invite_user_request_clone() {
+        let req1 = InviteUserRequest::new(
+            "clone@example.com".to_string(),
+            "Clone Test".to_string(),
+        );
+        let req2 = req1.clone();
+        assert_eq!(req1.email, req2.email);
+        assert_eq!(req1.name, req2.name);
+    }
+
+    #[test]
+    fn test_suspend_user_request_clone() {
+        let req1 = SuspendUserRequest::new("user123".to_string());
+        let req2 = req1.clone();
+        assert_eq!(req1.id, req2.id);
+    }
+
+    #[test]
+    fn test_activate_user_request_clone() {
+        let req1 = ActivateUserRequest::new("user456".to_string());
+        let req2 = req1.clone();
+        assert_eq!(req1.id, req2.id);
+    }
+
+    #[test]
+    fn test_delete_user_request_clone() {
+        let req1 = DeleteUserRequest::new("user789".to_string());
+        let req2 = req1.clone();
+        assert_eq!(req1.id, req2.id);
+    }
+
+    #[test]
+    fn test_promote_user_request_clone() {
+        let req1 = PromoteUserRequest::new("user101".to_string());
+        let req2 = req1.clone();
+        assert_eq!(req1.id, req2.id);
+    }
+
+    #[test]
+    fn test_demote_user_request_clone() {
+        let req1 = DemoteUserRequest::new("user202".to_string());
+        let req2 = req1.clone();
+        assert_eq!(req1.id, req2.id);
     }
 }

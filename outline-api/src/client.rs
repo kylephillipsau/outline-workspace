@@ -307,4 +307,49 @@ impl OutlineClient {
     pub async fn list_users(&self, request: ListUsersRequest) -> Result<ListUsersResponse> {
         self.post("users.list", &request).await
     }
+
+    // ========================================================================
+    // User Admin Operations
+    // ========================================================================
+
+    /// Suspend a user account
+    pub async fn suspend_user(&self, id: String) -> Result<User> {
+        let request = SuspendUserRequest::new(id);
+        let response: ApiResponse<User> = self.post("users.suspend", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to suspend user"))
+    }
+
+    /// Activate a suspended user account
+    pub async fn activate_user(&self, id: String) -> Result<User> {
+        let request = ActivateUserRequest::new(id);
+        let response: ApiResponse<User> = self.post("users.activate", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to activate user"))
+    }
+
+    /// Delete a user account
+    pub async fn delete_user(&self, id: String) -> Result<User> {
+        let request = DeleteUserRequest::new(id);
+        let response: ApiResponse<User> = self.post("users.delete", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to delete user"))
+    }
+
+    /// Promote a user to admin
+    pub async fn promote_user(&self, id: String) -> Result<User> {
+        let request = PromoteUserRequest::new(id);
+        let response: ApiResponse<User> = self.post("users.promote", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to promote user"))
+    }
+
+    /// Demote an admin to regular user
+    pub async fn demote_user(&self, id: String) -> Result<User> {
+        let request = DemoteUserRequest::new(id);
+        let response: ApiResponse<User> = self.post("users.demote", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to demote user"))
+    }
+
+    /// Invite a new user to the team
+    pub async fn invite_user(&self, request: InviteUserRequest) -> Result<User> {
+        let response: ApiResponse<User> = self.post("users.invite", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to invite user"))
+    }
 }
