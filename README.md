@@ -1,37 +1,75 @@
-# Outline CLI
+# Outline Toolkit
 
-A command-line tool for interacting with the Outline documentation server API. This tool allows you to read, create, update, and delete documents in your Outline instance from the terminal.
+A collection of Rust tools for interacting with the Outline documentation server. This workspace includes a shared API library, a command-line interface (CLI), and a terminal user interface (TUI) for managing your Outline knowledge base.
 
-## Features
+## Components
 
-- **Document Management**: Create, read, update, delete, list, and search documents
-- **Collection Management**: List and view collections
-- **Secure Authentication**: API tokens stored securely in system keyring
-- **Configuration Management**: Easy setup and configuration
-- **Full API Support**: Built on the official Outline API
+### 📚 outline-api
+A shared Rust library providing:
+- Outline API client implementation
+- Type-safe API request/response models
+- Secure credential management via system keyring
+- Authentication helpers
+
+Used by both the CLI and TUI applications.
+
+### ⌨️ outline-cli
+A command-line interface for Outline:
+- Create, read, update, delete, list, and search documents
+- Manage collections
+- Scriptable and automation-friendly
+- Full API coverage
+
+[See outline-cli README](outline-cli/README.md)
+
+### 🖥️ outline-tui
+An interactive terminal user interface for Outline:
+- Obsidian-inspired layout with sidebar navigation
+- Browse collections and documents in a tree view
+- View and edit documents with live preview
+- Keyboard-driven navigation
+- (Future: Real-time collaborative editing with CRDT support)
+
+[See outline-tui README](outline-tui/README.md)
 
 ## Installation
 
 ### Prerequisites
 
 - Rust 1.70 or later
-- Access to an Outline instance (e.g., <https://outline.yourdomain.com>)
+- Access to an Outline instance (e.g., `https://outline.yourdomain.com`)
 - An Outline API token (get this from Settings > API & Apps in your Outline instance)
 
 ### Build from source
 
+Build all components:
 ```bash
-cargo build --release
+cargo build --release --workspace
 ```
 
-The binary will be available at `target/release/outline-cli`
+Or build individual components:
+```bash
+# CLI only
+cargo build --release -p outline-cli
+
+# TUI only
+cargo build --release -p outline-tui
+```
+
+The binaries will be available in `target/release/`:
+- `outline-cli` - Command-line interface
+- `outline-tui` - Terminal user interface
 
 ## Quick Start
 
 ### 1. Configure your Outline instance
 
 ```bash
+# For CLI
 outline-cli config set-instance https://outline.yourdomain.com
+
+# For TUI (shared config location)
+# Edit ~/.config/outline-cli/config.toml
 ```
 
 ### 2. Set your API token
@@ -42,16 +80,11 @@ Get your API token from your Outline instance (Settings > API & Apps), then:
 outline-cli auth set-token YOUR_API_TOKEN_HERE
 ```
 
-The token will be stored securely in your system's keyring.
+The token will be stored securely in your system's keyring and is shared between CLI and TUI.
 
-### 3. Verify authentication
+### 3. Run the applications
 
-```bash
-outline-cli auth status
-```
-
-### 4. Start using the CLI
-
+**CLI:**
 ```bash
 # List all documents
 outline-cli documents list
@@ -61,10 +94,20 @@ outline-cli documents search "query"
 
 # Get a specific document
 outline-cli documents get DOCUMENT_ID
-
-# List collections
-outline-cli collections list
 ```
+
+**TUI:**
+```bash
+# Launch the interactive interface
+outline-tui
+```
+
+Navigate with:
+- `↑/↓` or `j/k`: Navigate sidebar
+- `Enter`: Open selected document
+- `Tab`: Switch between sidebar and editor
+- `r`: Refresh data
+- `q`: Quit
 
 ## Usage
 
@@ -154,33 +197,56 @@ outline-cli documents update doc-id-123 \
 
 ## Configuration
 
-The CLI stores configuration in `~/.outline-cli/config.toml`:
+Both CLI and TUI share configuration stored in `~/.config/outline-cli/config.toml`:
 
 ```toml
-instance_url = "https://outline.yourdomain.com"
-output_format = "text"
+api_base_url = "https://outline.yourdomain.com"
 ```
 
 API tokens are stored securely in your system's keyring and are never saved to disk in plain text.
 
-## Architecture
+## Workspace Structure
 
-The project is structured as follows:
-
-- `src/api/` - API client and type definitions
-- `src/auth/` - Authentication and credential management
-- `src/commands/` - CLI command implementations
-- `src/config/` - Configuration management
-- `src/main.rs` - CLI entry point
+```
+outline-cli/
+├── Cargo.toml              # Workspace definition
+├── outline-api/            # Shared API library
+│   ├── src/
+│   │   ├── client.rs       # API client implementation
+│   │   ├── types.rs        # Request/response types
+│   │   └── auth.rs         # Keyring authentication
+│   └── Cargo.toml
+├── outline-cli/            # Command-line interface
+│   ├── src/
+│   │   ├── commands/       # CLI command implementations
+│   │   ├── config/         # Configuration management
+│   │   └── main.rs         # CLI entry point
+│   └── Cargo.toml
+└── outline-tui/            # Terminal user interface
+    ├── src/
+    │   ├── app.rs          # Application state
+    │   ├── ui/             # UI rendering components
+    │   ├── config.rs       # Configuration
+    │   └── main.rs         # TUI entry point
+    └── Cargo.toml
+```
 
 ## Future Enhancements
 
-- OAuth2 authentication flow (in addition to API tokens)
+### outline-cli
+- OAuth2 authentication flow
 - Export documents to various formats (PDF, HTML, etc.)
 - Batch operations
-- Interactive mode
 - Document templates
 - More collection operations (create, update, delete)
+
+### outline-tui
+- Real-time collaborative editing with Yjs/CRDT
+- Markdown syntax highlighting and rendering
+- Full-featured text editor with vim keybindings
+- Search within documents
+- Multi-pane document viewing
+- Inline image preview
 
 ## API Documentation
 

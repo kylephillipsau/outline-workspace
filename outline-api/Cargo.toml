@@ -1,0 +1,30 @@
+[package]
+name = "outline-api"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# HTTP client
+reqwest = { workspace = true }
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Secure credential storage
+keyring = { version = "3", features = ["windows-native"] }
+
+# CRDT and collaboration (optional feature)
+yrs = { version = "0.21", optional = true }
+tokio-tungstenite = { version = "0.24", features = ["native-tls"], optional = true }
+futures-util = { version = "0.3", optional = true }
+url = { version = "2", optional = true }
+
+[features]
+default = []
+collaboration = ["yrs", "tokio-tungstenite", "futures-util", "url"]
