@@ -1,9 +1,19 @@
+pub mod attachments;
 pub mod auth;
 pub mod collections;
+pub mod comments;
 pub mod config;
 pub mod documents;
+pub mod groups;
+pub mod shares;
+pub mod users;
 
+pub use attachments::AttachmentsCommands;
 pub use auth::AuthCommands;
 pub use collections::CollectionsCommands;
+pub use comments::CommentsCommands;
 pub use config::ConfigCommands;
 pub use documents::DocumentsCommands;
+pub use groups::GroupsCommands;
+pub use shares::SharesCommands;
+pub use users::UsersCommands;

@@ -9,23 +9,47 @@ use ratatui::{
 
 /// Render the sidebar with collections and documents
 pub fn render_sidebar(f: &mut Frame, app: &mut App, area: Rect) {
+    // Store the sidebar area for mouse click detection
+    app.sidebar_area = Some(area);
+
     let is_focused = app.focused_pane == FocusedPane::Sidebar;
 
-    // Build list items from sidebar items
+    // Build list items from sidebar items with tree indicators
     let items: Vec<ListItem> = app
         .sidebar_items
         .iter()
         .map(|item| {
-            let indent = "  ".repeat(item.indent_level());
+            let indent_level = item.indent_level();
             let icon = item.icon();
             let title = item.title();
 
-            let line = Line::from(vec![
-                Span::raw(indent),
-                Span::raw(icon),
-                Span::raw(" "),
-                Span::raw(title),
-            ]);
+            // Build display line with simple spacing
+            let line = if indent_level == 0 {
+                // Collections: icon + space + title
+                Line::from(vec![
+                    Span::raw(icon),
+                    Span::raw("  "),
+                    Span::raw(title),
+                ])
+            } else if indent_level == 1 {
+                // Root documents: indent + icon + space + title
+                Line::from(vec![
+                    Span::raw("  "),
+                    Span::raw(icon),
+                    Span::raw("  "),
+                    Span::raw(title),
+                ])
+            } else {
+                // Child documents: indent + tree + icon + space + title
+                let base_indent = "  ".repeat(indent_level - 1);
+                Line::from(vec![
+                    Span::raw(base_indent),
+                    Span::styled("└─ ", Style::default().fg(Color::DarkGray)),
+                    Span::raw(icon),
+                    Span::raw("  "),
+                    Span::raw(title),
+                ])
+            };
 
             ListItem::new(line)
         })

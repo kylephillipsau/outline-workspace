@@ -22,6 +22,16 @@ pub struct Collection {
     pub permission: Option<CollectionPermission>,
 }
 
+impl Collection {
+    /// Get the icon for this collection, mapping icon names to appropriate glyphs/emojis
+    pub fn icon(&self) -> &str {
+        self.icon
+            .as_deref()
+            .map(|i| crate::icon::collection_icon_to_string(i))
+            .unwrap_or("📁")
+    }
+}
+
 // ============================================================================
 // Request Types
 // ============================================================================

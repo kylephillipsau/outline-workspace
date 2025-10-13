@@ -31,9 +31,9 @@ pub fn render_editor(f: &mut Frame, app: &App, area: Rect) {
 /// Render the document title
 fn render_document_title(f: &mut Frame, app: &App, is_focused: bool, area: Rect) {
     let title_text = if let Some(doc) = &app.current_document {
-        let emoji = doc.emoji.as_deref().unwrap_or("📄");
+        let icon = doc.icon();
         vec![
-            Span::raw(emoji),
+            Span::raw(icon),
             Span::raw(" "),
             Span::styled(
                 &doc.title,

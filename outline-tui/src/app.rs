@@ -1,7 +1,9 @@
 use outline_api::{Collection, Document};
 use outline_api::collaboration::{CollaborationClient, CollaborationEvent, ConnectionStatus, DocumentSync};
+use ratatui::layout::Rect;
 use ratatui::widgets::ListState;
 use tokio::sync::mpsc;
+use crate::modals::Modal;
 
 /// Which pane is currently focused
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,8 +36,8 @@ impl SidebarItem {
 
     pub fn icon(&self) -> &str {
         match self {
-            SidebarItem::Collection(c) => c.icon.as_deref().unwrap_or("📁"),
-            SidebarItem::Document(d, _) => d.emoji.as_deref().unwrap_or("📄"),
+            SidebarItem::Collection(c) => c.icon(),
+            SidebarItem::Document(d, _) => d.icon(),
         }
     }
 
@@ -94,6 +96,12 @@ pub struct App {
     /// Collaboration connection status
     #[allow(dead_code)]
     pub collaboration_status: ConnectionStatus,
+
+    /// Modal dialog state
+    pub modal: Modal,
+
+    /// Sidebar rendered area (for mouse click detection)
+    pub sidebar_area: Option<Rect>,
 }
 
 impl App {
@@ -116,6 +124,8 @@ impl App {
             collaboration_rx: None,
             document_sync: None,
             collaboration_status: ConnectionStatus::Disconnected,
+            modal: Modal::new(),
+            sidebar_area: None,
         }
     }
 

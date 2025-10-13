@@ -16,15 +16,27 @@ serde_json = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 
+# Logging
+tracing = { workspace = true }
+
 # Secure credential storage
 keyring = { version = "3", features = ["windows-native"] }
+
+# Icon mapping
+phf = { version = "0.11", features = ["macros"] }
+
+# OAuth2 authentication
+oauth2 = "4.4"
+tiny_http = "0.12"
+webbrowser = "1.0"
+url = "2"
+chrono = { version = "0.4", features = ["serde"] }
 
 # CRDT and collaboration (optional feature)
 yrs = { version = "0.21", optional = true }
 tokio-tungstenite = { version = "0.24", features = ["native-tls"], optional = true }
 futures-util = { version = "0.3", optional = true }
-url = { version = "2", optional = true }
 
 [features]
 default = []
-collaboration = ["yrs", "tokio-tungstenite", "futures-util", "url"]
+collaboration = ["yrs", "tokio-tungstenite", "futures-util"]

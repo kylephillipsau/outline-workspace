@@ -11,7 +11,7 @@ pub struct Document {
     pub title: String,
     #[serde(default)]
     pub text: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", alias = "icon")]
     pub emoji: Option<String>,
     #[serde(default)]
     pub url_id: String,
@@ -38,6 +38,16 @@ pub struct Document {
     pub template: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub collaborators: Option<Vec<User>>,
+}
+
+impl Document {
+    /// Get the icon for this document, mapping icon names to appropriate glyphs/emojis
+    pub fn icon(&self) -> &str {
+        self.emoji
+            .as_deref()
+            .map(|e| crate::icon::icon_to_string(e))
+            .unwrap_or("📄")
+    }
 }
 
 /// Document sort options

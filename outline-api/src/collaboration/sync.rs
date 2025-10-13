@@ -1,7 +1,9 @@
 use anyhow::Result;
-use yrs::{Doc, Text, Transact, ReadTxn, GetString, UpdateEvent};
+use yrs::{Doc, Text, Transact, ReadTxn, GetString, UpdateEvent, StateVector};
 use yrs::updates::decoder::Decode;
+use yrs::updates::encoder::Encode;
 use std::sync::{Arc, Mutex};
+use super::protocol::Message;
 
 /// Synchronization state for the document
 #[derive(Debug, Clone, PartialEq)]
@@ -94,6 +96,33 @@ impl DocumentSync {
         let state_vector = txn.state_vector();
         let update = txn.encode_diff_v1(&state_vector);
         Ok(update)
+    }
+
+    /// Get the state vector for sync
+    pub fn get_state_vector(&self) -> Vec<u8> {
+        let txn = self.doc.transact();
+        txn.state_vector().encode_v1()
+    }
+
+    /// Create a Sync Step 1 message with the current state vector
+    pub fn create_sync_step1(&self) -> Message {
+        let state_vector = self.get_state_vector();
+        Message::sync_step1(state_vector)
+    }
+
+    /// Create a Sync Step 2 message with updates for a given state vector
+    pub fn create_sync_step2(&self, remote_state_vector: &[u8]) -> Result<Message> {
+        let txn = self.doc.transact();
+        let sv = StateVector::decode_v1(remote_state_vector)
+            .map_err(|e| anyhow::anyhow!("Failed to decode state vector: {:?}", e))?;
+        let update = txn.encode_diff_v1(&sv);
+        Ok(Message::sync_step2(update))
+    }
+
+    /// Create an Update message from recent changes
+    pub fn create_update_message(&self) -> Result<Message> {
+        let update = self.create_update()?;
+        Ok(Message::update(update))
     }
 
     /// Subscribe to document changes

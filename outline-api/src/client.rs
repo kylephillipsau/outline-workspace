@@ -4,6 +4,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use super::types::*;
+use super::auth;
 
 /// API client for Outline
 pub struct OutlineClient {
@@ -33,6 +34,41 @@ impl OutlineClient {
         self
     }
 
+    /// Create a client that uses automatic authentication (OAuth2 or API token from keyring)
+    pub fn with_auto_auth(base_url: String) -> Result<Self> {
+        Self::new(base_url)
+    }
+
+    /// Get the authorization token (from explicit token, OAuth2, or API token)
+    async fn get_auth_token(&self) -> Result<Option<String>> {
+        if let Some(token) = &self.api_token {
+            // Use explicitly provided token
+            Ok(Some(token.clone()))
+        } else {
+            // Use automatic authentication from keyring
+            match auth::get_access_token().await {
+                Ok(token) => Ok(Some(token)),
+                Err(_) => Ok(None), // No auth configured
+            }
+        }
+    }
+
+    /// Build authorization headers
+    async fn build_auth_headers(&self) -> Result<HeaderMap> {
+        let mut headers = HeaderMap::new();
+
+        if let Some(token) = self.get_auth_token().await? {
+            let auth_value = format!("Bearer {}", token);
+            headers.insert(
+                AUTHORIZATION,
+                HeaderValue::from_str(&auth_value)
+                    .context("Failed to create authorization header")?,
+            );
+        }
+
+        Ok(headers)
+    }
+
     /// Make a POST request to the API
     async fn post<T, R>(&self, endpoint: &str, request: &T) -> Result<R>
     where
@@ -41,17 +77,8 @@ impl OutlineClient {
     {
         let url = format!("{}/{}", self.base_url, endpoint);
 
-        let mut headers = HeaderMap::new();
+        let mut headers = self.build_auth_headers().await?;
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-
-        if let Some(token) = &self.api_token {
-            let auth_value = format!("Bearer {}", token);
-            headers.insert(
-                AUTHORIZATION,
-                HeaderValue::from_str(&auth_value)
-                    .context("Failed to create authorization header")?,
-            );
-        }
 
         let response = self
             .client
@@ -85,7 +112,6 @@ impl OutlineClient {
     pub async fn get_document(&self, id: String) -> Result<Document> {
         let request = DocumentInfoRequest::new(id);
         let response: ApiResponse<Document> = self.post("documents.info", &request).await?;
-
         response.data.ok_or_else(|| anyhow!("Document not found"))
     }
 
@@ -216,16 +242,7 @@ impl OutlineClient {
     pub async fn import_document(&self, request: ImportDocumentRequest) -> Result<Document> {
         let url = format!("{}/{}", self.base_url, "documents.import");
 
-        let mut headers = HeaderMap::new();
-
-        if let Some(token) = &self.api_token {
-            let auth_value = format!("Bearer {}", token);
-            headers.insert(
-                AUTHORIZATION,
-                HeaderValue::from_str(&auth_value)
-                    .context("Failed to create authorization header")?,
-            );
-        }
+        let headers = self.build_auth_headers().await?;
 
         // Create multipart form for file upload
         let file_part = reqwest::multipart::Part::bytes(request.file)
@@ -273,17 +290,8 @@ impl OutlineClient {
     pub async fn export_document(&self, request: ExportDocumentRequest) -> Result<Vec<u8>> {
         let url = format!("{}/{}", self.base_url, "documents.export");
 
-        let mut headers = HeaderMap::new();
+        let mut headers = self.build_auth_headers().await?;
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-
-        if let Some(token) = &self.api_token {
-            let auth_value = format!("Bearer {}", token);
-            headers.insert(
-                AUTHORIZATION,
-                HeaderValue::from_str(&auth_value)
-                    .context("Failed to create authorization header")?,
-            );
-        }
 
         let response = self
             .client
@@ -398,17 +406,8 @@ impl OutlineClient {
     pub async fn export_collection(&self, request: ExportCollectionRequest) -> Result<Vec<u8>> {
         let url = format!("{}/{}", self.base_url, "collections.export");
 
-        let mut headers = HeaderMap::new();
+        let mut headers = self.build_auth_headers().await?;
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-
-        if let Some(token) = &self.api_token {
-            let auth_value = format!("Bearer {}", token);
-            headers.insert(
-                AUTHORIZATION,
-                HeaderValue::from_str(&auth_value)
-                    .context("Failed to create authorization header")?,
-            );
-        }
 
         let response = self
             .client
@@ -440,17 +439,8 @@ impl OutlineClient {
     pub async fn export_all_collections(&self, request: ExportAllCollectionsRequest) -> Result<Vec<u8>> {
         let url = format!("{}/{}", self.base_url, "collections.export_all");
 
-        let mut headers = HeaderMap::new();
+        let mut headers = self.build_auth_headers().await?;
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-
-        if let Some(token) = &self.api_token {
-            let auth_value = format!("Bearer {}", token);
-            headers.insert(
-                AUTHORIZATION,
-                HeaderValue::from_str(&auth_value)
-                    .context("Failed to create authorization header")?,
-            );
-        }
 
         let response = self
             .client
@@ -482,16 +472,7 @@ impl OutlineClient {
     pub async fn import_file_to_collection(&self, request: ImportFileToCollectionRequest) -> Result<serde_json::Value> {
         let url = format!("{}/{}", self.base_url, "collections.import_file");
 
-        let mut headers = HeaderMap::new();
-
-        if let Some(token) = &self.api_token {
-            let auth_value = format!("Bearer {}", token);
-            headers.insert(
-                AUTHORIZATION,
-                HeaderValue::from_str(&auth_value)
-                    .context("Failed to create authorization header")?,
-            );
-        }
+        let headers = self.build_auth_headers().await?;
 
         // Create multipart form for file upload
         let file_part = reqwest::multipart::Part::bytes(request.file)
@@ -589,5 +570,274 @@ impl OutlineClient {
     pub async fn invite_user(&self, request: InviteUserRequest) -> Result<User> {
         let response: ApiResponse<User> = self.post("users.invite", &request).await?;
         response.data.ok_or_else(|| anyhow!("Failed to invite user"))
+    }
+
+    // ========================================================================
+    // Comment Operations
+    // ========================================================================
+
+    /// Create a comment on a document
+    pub async fn create_comment(&self, request: CreateCommentRequest) -> Result<Comment> {
+        let response: ApiResponse<Comment> = self.post("comments.create", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to create comment"))
+    }
+
+    /// Get comment details
+    pub async fn get_comment(&self, id: String) -> Result<Comment> {
+        let request = CommentInfoRequest::new(id);
+        let response: ApiResponse<Comment> = self.post("comments.info", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Comment not found"))
+    }
+
+    /// List comments on a document
+    pub async fn list_comments(&self, request: ListCommentsRequest) -> Result<ListCommentsResponse> {
+        self.post("comments.list", &request).await
+    }
+
+    /// Update a comment
+    pub async fn update_comment(&self, request: UpdateCommentRequest) -> Result<Comment> {
+        let response: ApiResponse<Comment> = self.post("comments.update", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to update comment"))
+    }
+
+    /// Delete a comment
+    pub async fn delete_comment(&self, id: String) -> Result<()> {
+        let request = DeleteCommentRequest::new(id);
+        let _response: ApiResponse<serde_json::Value> = self.post("comments.delete", &request).await?;
+        Ok(())
+    }
+
+    /// Mark a comment thread as resolved
+    pub async fn resolve_comment(&self, id: String) -> Result<Comment> {
+        let request = ResolveCommentRequest::new(id);
+        let response: ApiResponse<Comment> = self.post("comments.resolve", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to resolve comment"))
+    }
+
+    /// Mark a comment thread as unresolved
+    pub async fn unresolve_comment(&self, id: String) -> Result<Comment> {
+        let request = UnresolveCommentRequest::new(id);
+        let response: ApiResponse<Comment> = self.post("comments.unresolve", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to unresolve comment"))
+    }
+
+    // ========================================================================
+    // Group Operations
+    // ========================================================================
+
+    /// Create a new group
+    pub async fn create_group(&self, request: CreateGroupRequest) -> Result<Group> {
+        let response: ApiResponse<Group> = self.post("groups.create", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to create group"))
+    }
+
+    /// Get group details
+    pub async fn get_group(&self, id: String) -> Result<Group> {
+        let request = GroupInfoRequest::new(id);
+        let response: ApiResponse<Group> = self.post("groups.info", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Group not found"))
+    }
+
+    /// List all groups
+    pub async fn list_groups(&self, request: ListGroupsRequest) -> Result<ListGroupsResponse> {
+        self.post("groups.list", &request).await
+    }
+
+    /// Update group properties
+    pub async fn update_group(&self, request: UpdateGroupRequest) -> Result<Group> {
+        let response: ApiResponse<Group> = self.post("groups.update", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to update group"))
+    }
+
+    /// Delete a group
+    pub async fn delete_group(&self, id: String) -> Result<()> {
+        let request = DeleteGroupRequest::new(id);
+        let _response: ApiResponse<serde_json::Value> = self.post("groups.delete", &request).await?;
+        Ok(())
+    }
+
+    /// Add a user to a group
+    pub async fn add_user_to_group(&self, request: AddUserToGroupRequest) -> Result<()> {
+        let _response: ApiResponse<serde_json::Value> = self.post("groups.add_user", &request).await?;
+        Ok(())
+    }
+
+    /// Remove a user from a group
+    pub async fn remove_user_from_group(&self, request: RemoveUserFromGroupRequest) -> Result<()> {
+        let _response: ApiResponse<serde_json::Value> = self.post("groups.remove_user", &request).await?;
+        Ok(())
+    }
+
+    /// List group members
+    pub async fn list_group_memberships(&self, request: GroupMembershipsRequest) -> Result<GroupMembershipsResponse> {
+        self.post("groups.memberships", &request).await
+    }
+
+    // ========================================================================
+    // Share Operations
+    // ========================================================================
+
+    /// Create a public share link
+    pub async fn create_share(&self, request: CreateShareRequest) -> Result<Share> {
+        let response: ApiResponse<Share> = self.post("shares.create", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to create share"))
+    }
+
+    /// Get share details
+    pub async fn get_share(&self, id: String) -> Result<Share> {
+        let request = ShareInfoRequest::new(id);
+        let response: ApiResponse<Share> = self.post("shares.info", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Share not found"))
+    }
+
+    /// List all shares
+    pub async fn list_shares(&self, request: ListSharesRequest) -> Result<ListSharesResponse> {
+        self.post("shares.list", &request).await
+    }
+
+    /// Update share settings
+    pub async fn update_share(&self, request: UpdateShareRequest) -> Result<Share> {
+        let response: ApiResponse<Share> = self.post("shares.update", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to update share"))
+    }
+
+    /// Revoke a share link
+    pub async fn revoke_share(&self, id: String) -> Result<()> {
+        let request = RevokeShareRequest::new(id);
+        let _response: ApiResponse<serde_json::Value> = self.post("shares.revoke", &request).await?;
+        Ok(())
+    }
+
+    // ========================================================================
+    // Attachment Operations
+    // ========================================================================
+
+    /// Upload a file attachment
+    pub async fn create_attachment(&self, request: CreateAttachmentRequest) -> Result<Attachment> {
+        let url = format!("{}/{}", self.base_url, "attachments.create");
+
+        let headers = self.build_auth_headers().await?;
+
+        // Create multipart form for file upload
+        let file_part = reqwest::multipart::Part::bytes(request.data)
+            .file_name(request.name.clone());
+
+        let mut form = reqwest::multipart::Form::new()
+            .text("name", request.name)
+            .text("contentType", request.content_type)
+            .text("size", request.size.to_string())
+            .part("file", file_part);
+
+        if let Some(doc_id) = request.document_id {
+            form = form.text("documentId", doc_id);
+        }
+
+        let response = self
+            .client
+            .post(&url)
+            .headers(headers)
+            .multipart(form)
+            .send()
+            .await
+            .context("Failed to send attachment upload request")?;
+
+        let status = response.status();
+        let body = response.text().await.context("Failed to read response")?;
+
+        if !status.is_success() {
+            return Err(anyhow!(
+                "Attachment upload failed with status {}: {}",
+                status,
+                body
+            ));
+        }
+
+        let api_response: ApiResponse<Attachment> = serde_json::from_str(&body)
+            .context("Failed to parse attachment response")?;
+
+        api_response.data.ok_or_else(|| anyhow!("Failed to create attachment"))
+    }
+
+    /// Delete an attachment
+    pub async fn delete_attachment(&self, id: String) -> Result<()> {
+        let request = DeleteAttachmentRequest::new(id);
+        let _response: ApiResponse<serde_json::Value> = self.post("attachments.delete", &request).await?;
+        Ok(())
+    }
+
+    /// Get attachment download URL
+    pub async fn redirect_attachment(&self, id: String) -> Result<String> {
+        let request = RedirectAttachmentRequest::new(id);
+        let response: ApiResponse<RedirectAttachmentResponse> = self.post("attachments.redirect", &request).await?;
+        response.data
+            .ok_or_else(|| anyhow!("Failed to get attachment URL"))
+            .map(|r| r.url)
+    }
+
+    /// List attachments
+    pub async fn list_attachments(&self, request: ListAttachmentsRequest) -> Result<ListAttachmentsResponse> {
+        self.post("attachments.list", &request).await
+    }
+
+    // ========================================================================
+    // Notification Operations
+    // ========================================================================
+
+    /// List user notifications
+    pub async fn list_notifications(&self, request: ListNotificationsRequest) -> Result<ListNotificationsResponse> {
+        self.post("notifications.list", &request).await
+    }
+
+    /// Update a notification (mark as read)
+    pub async fn update_notification(&self, request: UpdateNotificationRequest) -> Result<Notification> {
+        let response: ApiResponse<Notification> = self.post("notifications.update", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to update notification"))
+    }
+
+    /// Archive a notification
+    pub async fn archive_notification(&self, id: String) -> Result<()> {
+        let request = ArchiveNotificationRequest::new(id);
+        let _response: ApiResponse<serde_json::Value> = self.post("notifications.archive", &request).await?;
+        Ok(())
+    }
+
+    /// Unarchive a notification
+    pub async fn unarchive_notification(&self, id: String) -> Result<()> {
+        let request = UnarchiveNotificationRequest::new(id);
+        let _response: ApiResponse<serde_json::Value> = self.post("notifications.unarchive", &request).await?;
+        Ok(())
+    }
+
+    /// Archive all notifications
+    pub async fn archive_all_notifications(&self) -> Result<()> {
+        let request = ArchiveAllNotificationsRequest::new();
+        let _response: ApiResponse<serde_json::Value> = self.post("notifications.archive_all", &request).await?;
+        Ok(())
+    }
+
+    // ========================================================================
+    // Event Operations (Audit Trail)
+    // ========================================================================
+
+    /// List team events (audit log)
+    pub async fn list_events(&self, request: ListEventsRequest) -> Result<ListEventsResponse> {
+        self.post("events.list", &request).await
+    }
+
+    // ========================================================================
+    // Team Operations
+    // ========================================================================
+
+    /// Get team information
+    pub async fn get_team(&self) -> Result<Team> {
+        let request = TeamInfoRequest::new();
+        let response: ApiResponse<Team> = self.post("teams.info", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to get team information"))
+    }
+
+    /// Update team settings
+    pub async fn update_team(&self, request: UpdateTeamRequest) -> Result<Team> {
+        let response: ApiResponse<Team> = self.post("teams.update", &request).await?;
+        response.data.ok_or_else(|| anyhow!("Failed to update team"))
     }
 }

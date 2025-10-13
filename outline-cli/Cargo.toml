@@ -25,6 +25,9 @@ clap = { version = "4", features = ["derive", "env"] }
 # OAuth2
 oauth2 = "5.0"
 
+# Date/Time for token expiry display
+chrono = "0.4"
+
 # Error handling
 anyhow = { workspace = true }
 thiserror = { workspace = true }

@@ -1,5 +1,6 @@
 pub mod sidebar;
 pub mod editor;
+pub mod modal;
 
 use crate::app::{App, FocusedPane};
 use ratatui::{
@@ -12,6 +13,7 @@ use ratatui::{
 
 pub use sidebar::render_sidebar;
 pub use editor::render_editor;
+pub use modal::render_modal;
 
 /// Render the entire UI
 pub fn render(f: &mut Frame, app: &mut App) {
@@ -45,6 +47,9 @@ pub fn render(f: &mut Frame, app: &mut App) {
 
     // Render footer
     render_footer(f, app, chunks[2]);
+
+    // Render modal on top of everything
+    render_modal(f, app);
 }
 
 /// Render the header

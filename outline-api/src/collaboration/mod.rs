@@ -9,11 +9,15 @@
 mod websocket;
 #[cfg(feature = "collaboration")]
 mod sync;
+#[cfg(feature = "collaboration")]
+mod protocol;
 
 #[cfg(feature = "collaboration")]
 pub use websocket::{CollaborationClient, ConnectionStatus};
 #[cfg(feature = "collaboration")]
 pub use sync::{DocumentSync, SyncState};
+#[cfg(feature = "collaboration")]
+pub use protocol::{Message, MessageType};
 
 #[cfg(feature = "collaboration")]
 use anyhow::Result;
@@ -43,13 +47,19 @@ pub async fn start_collaboration(
     api_token: String,
     document_id: String,
 ) -> Result<(CollaborationClient, mpsc::Receiver<CollaborationEvent>)> {
+    use std::sync::Arc;
+
     let (tx, rx) = mpsc::channel(100);
+
+    // Create a shared DocumentSync instance
+    let doc_sync = Arc::new(DocumentSync::new());
 
     let client = CollaborationClient::new(
         api_base_url,
         api_token,
         document_id,
         tx,
+        doc_sync,
     )?;
 
     Ok((client, rx))

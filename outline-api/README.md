@@ -50,7 +50,53 @@ async fn main() -> Result<()> {
 
 ### Authentication
 
-The library provides secure credential storage using the system keyring:
+The library supports two authentication methods:
+
+#### Option 1: OAuth2 (Recommended)
+
+OAuth2 provides automatic token refresh and better security:
+
+```rust
+use outline_api::auth::{self, OAuth2Config};
+use anyhow::Result;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    // Configure OAuth2 credentials (one-time setup)
+    let config = OAuth2Config {
+        client_id: "your-client-id".to_string(),
+        client_secret: "your-client-secret".to_string(),
+        auth_url: "https://app.getoutline.com/oauth/authorize".to_string(),
+        token_url: "https://app.getoutline.com/oauth/token".to_string(),
+        redirect_url: "http://localhost:8080/callback".to_string(),
+    };
+    auth::set_oauth2_config(&config)?;
+
+    // Start OAuth2 authorization flow (opens browser)
+    let scopes = vec!["read".to_string(), "write".to_string()];
+    let tokens = auth::oauth2_authorize(config, scopes).await?;
+
+    println!("Access token stored! Expires at: {:?}", tokens.expires_at);
+
+    // Create client with automatic auth (uses OAuth2 or API token)
+    let client = OutlineClient::with_auto_auth("https://outline.example.com".to_string())?;
+
+    // Tokens are automatically refreshed when expired
+    let collections = client.list_collections(None, None).await?;
+
+    Ok(())
+}
+```
+
+**Creating OAuth2 Credentials:**
+1. Go to your Outline instance → Settings → API & Apps
+2. Create a new OAuth application
+3. Set the redirect URL to: `http://localhost:8080/callback`
+4. Copy the Client ID and Client Secret
+
+#### Option 2: API Token (Legacy)
+
+Manual API token management using the system keyring:
 
 ```rust
 use outline_api::auth;
@@ -68,6 +114,26 @@ if auth::has_api_token() {
 
 // Delete token
 auth::delete_api_token()?;
+
+// Create client with manual token
+let client = OutlineClient::new("https://outline.example.com".to_string())?
+    .with_token(token);
+```
+
+#### Automatic Authentication
+
+The client can automatically detect and use the appropriate authentication method:
+
+```rust
+// This will use OAuth2 if configured, otherwise falls back to API token
+let client = OutlineClient::with_auto_auth("https://outline.example.com".to_string())?;
+
+// Check which auth method is being used
+match auth::get_auth_method() {
+    auth::AuthMethod::OAuth2 => println!("Using OAuth2"),
+    auth::AuthMethod::ApiToken => println!("Using API Token"),
+    auth::AuthMethod::None => println!("Not authenticated"),
+}
 ```
 
 ## API Client Methods
@@ -144,6 +210,127 @@ auth::delete_api_token()?;
 - `promote_user()` - Promote user to admin
 - `demote_user()` - Demote admin to regular user
 - `invite_user()` - Invite new user to team
+
+### Comments (7 operations)
+
+**Core Operations:**
+- `create_comment()` - Create a comment on a document
+- `get_comment()` - Get comment details
+- `list_comments()` - List comments on a document
+- `update_comment()` - Update a comment
+- `delete_comment()` - Delete a comment
+
+**Thread Management:**
+- `resolve_comment()` - Mark a comment thread as resolved
+- `unresolve_comment()` - Mark a comment thread as unresolved
+
+### Groups (8 operations)
+
+**Core Operations:**
+- `create_group()` - Create a new group
+- `get_group()` - Get group details
+- `list_groups()` - List all groups
+- `update_group()` - Update group properties
+- `delete_group()` - Delete a group
+
+**Member Management:**
+- `add_user_to_group()` - Add a user to a group
+- `remove_user_from_group()` - Remove a user from a group
+- `list_group_memberships()` - List group members
+
+### Shares (5 operations)
+
+**Core Operations:**
+- `create_share()` - Create a public share link
+- `get_share()` - Get share details
+- `list_shares()` - List all shares
+- `update_share()` - Update share settings
+- `revoke_share()` - Revoke a share link
+
+### Attachments (4 operations)
+
+**Core Operations:**
+- `create_attachment()` - Upload a file attachment
+- `delete_attachment()` - Delete an attachment
+- `redirect_attachment()` - Get attachment download URL
+- `list_attachments()` - List attachments
+
+### Notifications (5 operations)
+
+**Core Operations:**
+- `list_notifications()` - List user notifications
+- `update_notification()` - Update a notification (mark as read)
+- `archive_notification()` - Archive a notification
+- `unarchive_notification()` - Unarchive a notification
+- `archive_all_notifications()` - Archive all notifications
+
+### Events (1 operation)
+
+**Audit Trail:**
+- `list_events()` - List team events (audit log)
+
+### Teams (2 operations)
+
+**Core Operations:**
+- `get_team()` - Get team information
+- `update_team()` - Update team settings
+
+### Real-Time Collaboration (Optional `collaboration` feature)
+
+**WebSocket-based collaborative editing using Yrs CRDT:**
+
+```rust
+use outline_api::collaboration::{start_collaboration, CollaborationEvent};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let (mut client, mut events) = start_collaboration(
+        "https://outline.example.com".to_string(),
+        api_token,
+        document_id,
+    ).await?;
+
+    // Connect to the collaboration server
+    client.connect().await?;
+
+    // Handle collaboration events
+    while let Some(event) = events.recv().await {
+        match event {
+            CollaborationEvent::DocumentUpdated(text) => {
+                println!("Document updated: {}", text);
+            }
+            CollaborationEvent::StatusChanged(status) => {
+                println!("Status: {:?}", status);
+            }
+            CollaborationEvent::UserJoined(user) => {
+                println!("User joined: {}", user);
+            }
+            CollaborationEvent::UserLeft(user) => {
+                println!("User left: {}", user);
+            }
+            CollaborationEvent::Error(err) => {
+                eprintln!("Error: {}", err);
+            }
+        }
+    }
+
+    Ok(())
+}
+```
+
+**Enable the collaboration feature in your `Cargo.toml`:**
+
+```toml
+[dependencies]
+outline-api = { path = "../outline-api", features = ["collaboration"] }
+```
+
+**Features:**
+- Real-time document synchronization using Yjs CRDT
+- Conflict-free collaborative editing
+- WebSocket connection to Hocuspocus backend
+- Presence awareness (user join/leave notifications)
+- Automatic state synchronization
 
 ## Types
 
