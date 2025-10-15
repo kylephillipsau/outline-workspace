@@ -4,6 +4,7 @@ members = [
     "outline-api",
     "outline-cli",
     "outline-tui",
+    "outline-mcp",
 ]
 
 [workspace.package]

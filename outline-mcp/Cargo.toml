@@ -1,0 +1,41 @@
+[package]
+name = "outline-mcp"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "outline-mcp"
+path = "src/main.rs"
+
+[dependencies]
+# Shared API library
+outline-api = { path = "../outline-api" }
+
+# MCP SDK
+rmcp = { version = "0.8", features = ["macros", "server"] }
+rmcp-macros = "0.8"
+
+# Async runtime
+tokio = { workspace = true }
+futures = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# JSON Schema (must match rmcp's version)
+schemars = "1.0"
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Configuration (reuse CLI's config system)
+config = { workspace = true }
+toml = { workspace = true }
+keyring = { version = "3", features = ["windows-native"] }
+dirs = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = "0.3"

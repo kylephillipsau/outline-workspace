@@ -253,6 +253,32 @@ pub async fn get_access_token() -> Result<String> {
 
 /// Start OAuth2 authorization flow
 pub async fn oauth2_authorize(config: OAuth2Config, scopes: Vec<String>) -> Result<OAuth2Tokens> {
+    // Validate configuration
+    if config.client_id.trim().is_empty() {
+        return Err(anyhow!("Client ID is empty. Please set OUTLINE_CLIENT_ID in your .env file"));
+    }
+    if config.client_secret.trim().is_empty() {
+        return Err(anyhow!("Client Secret is empty. Please set OUTLINE_CLIENT_SECRET in your .env file"));
+    }
+
+    // Validate URLs
+    if !config.auth_url.starts_with("http://") && !config.auth_url.starts_with("https://") {
+        return Err(anyhow!("Invalid auth URL: {}. Must start with http:// or https://", config.auth_url));
+    }
+    if !config.token_url.starts_with("http://") && !config.token_url.starts_with("https://") {
+        return Err(anyhow!("Invalid token URL: {}. Must start with http:// or https://", config.token_url));
+    }
+
+    // Ensure token URL ends with /oauth/token
+    if !config.token_url.contains("/oauth/token") {
+        return Err(anyhow!(
+            "Token URL looks incorrect: {}\n\
+             Expected format: https://your-instance.com/oauth/token\n\
+             Make sure you're using the full OAuth token endpoint URL, not just the base URL",
+            config.token_url
+        ));
+    }
+
     // Create OAuth2 client
     let client = BasicClient::new(
         ClientId::new(config.client_id.clone()),
@@ -286,6 +312,12 @@ pub async fn oauth2_authorize(config: OAuth2Config, scopes: Vec<String>) -> Resu
     println!("If the browser doesn't open, visit this URL:");
     println!("{}", authorize_url);
     println!();
+    println!("OAuth Configuration:");
+    println!("  Auth URL: {}", config.auth_url);
+    println!("  Token URL: {}", config.token_url);
+    println!("  Redirect URL: {}", config.redirect_url);
+    println!("  Client ID: {}...", &config.client_id.chars().take(10).collect::<String>());
+    println!();
     println!("Waiting for authorization callback on http://localhost:{}...", port);
 
     // Open the browser
@@ -307,7 +339,20 @@ pub async fn oauth2_authorize(config: OAuth2Config, scopes: Vec<String>) -> Resu
         .exchange_code(AuthorizationCode::new(code))
         .request_async(async_http_client)
         .await
-        .context("Failed to exchange authorization code for access token")?;
+        .map_err(|e| {
+            // Provide more detailed error information
+            anyhow!(
+                "Failed to exchange authorization code for access token.\n\
+                 Error: {}\n\n\
+                 This usually means:\n\
+                 1. Client ID or Client Secret is incorrect\n\
+                 2. The OAuth application is not properly configured\n\
+                 3. The authorization code expired (try again)\n\
+                 4. Network connectivity issues\n\n\
+                 Double-check your credentials in .env file",
+                e
+            )
+        })?;
 
     // Calculate expiry time
     let expires_at = token_result.expires_in().map(|duration| {
@@ -394,6 +439,31 @@ fn receive_callback(listener: &TcpListener) -> Result<(String, CsrfToken)> {
 
     let url = Url::parse(&format!("http://localhost{}", redirect_url))
         .context("Failed to parse callback URL")?;
+
+    // Check for error response from OAuth provider
+    if let Some((_, error)) = url.query_pairs().find(|(key, _)| key == "error") {
+        let error_description = url
+            .query_pairs()
+            .find(|(key, _)| key == "error_description")
+            .map(|(_, value)| value.into_owned())
+            .unwrap_or_else(|| "No description provided".to_string());
+
+        // Send error response
+        let response = format!(
+            "HTTP/1.1 400 Bad Request\r\n\r\n\
+            <html><body>\
+            <h1>Authorization Failed</h1>\
+            <p>Error: {}</p>\
+            <p>Description: {}</p>\
+            <p>You can close this window and return to the terminal.</p>\
+            </body></html>",
+            error, error_description
+        );
+
+        let _ = stream.write_all(response.as_bytes());
+
+        return Err(anyhow!("OAuth2 authorization failed: {} - {}", error, error_description));
+    }
 
     // Extract code and state from query parameters
     let code = url

@@ -1,8 +1,9 @@
 pub mod sidebar;
 pub mod editor;
 pub mod modal;
+pub mod auth;
 
-use crate::app::{App, FocusedPane};
+use crate::app::{App, AppView, FocusedPane};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -14,42 +15,56 @@ use ratatui::{
 pub use sidebar::render_sidebar;
 pub use editor::render_editor;
 pub use modal::render_modal;
+pub use auth::{render_auth_page, render_api_token_input};
 
 /// Render the entire UI
 pub fn render(f: &mut Frame, app: &mut App) {
-    let size = f.area();
+    match app.view {
+        AppView::AuthSetup => {
+            // Show auth setup page (full screen)
+            if app.auth_selected == 1 && !app.api_token_input.is_empty() {
+                render_api_token_input(f, app);
+            } else {
+                render_auth_page(f, app);
+            }
+        }
+        AppView::Main => {
+            // Show normal app UI
+            let size = f.area();
 
-    // Create the main layout: header, content, footer
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3),  // Header
-            Constraint::Min(0),     // Content
-            Constraint::Length(3),  // Footer
-        ])
-        .split(size);
+            // Create the main layout: header, content, footer
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(3),  // Header
+                    Constraint::Min(0),     // Content
+                    Constraint::Length(3),  // Footer
+                ])
+                .split(size);
 
-    // Render header
-    render_header(f, chunks[0]);
+            // Render header
+            render_header(f, chunks[0]);
 
-    // Split content into sidebar and editor
-    let content_chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(25),  // Sidebar
-            Constraint::Percentage(75),  // Editor
-        ])
-        .split(chunks[1]);
+            // Split content into sidebar and editor
+            let content_chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Percentage(25),  // Sidebar
+                    Constraint::Percentage(75),  // Editor
+                ])
+                .split(chunks[1]);
 
-    // Render sidebar and editor
-    render_sidebar(f, app, content_chunks[0]);
-    render_editor(f, app, content_chunks[1]);
+            // Render sidebar and editor
+            render_sidebar(f, app, content_chunks[0]);
+            render_editor(f, app, content_chunks[1]);
 
-    // Render footer
-    render_footer(f, app, chunks[2]);
+            // Render footer
+            render_footer(f, app, chunks[2]);
 
-    // Render modal on top of everything
-    render_modal(f, app);
+            // Render modal on top of everything
+            render_modal(f, app);
+        }
+    }
 }
 
 /// Render the header

@@ -34,6 +34,9 @@ pub fn render_modal(f: &mut Frame, app: &App) {
         ModalType::Message { title, message } => {
             render_message(f, title, message);
         }
+        ModalType::AuthSetup { selected } => {
+            render_auth_setup(f, *selected);
+        }
     }
 }
 
@@ -101,13 +104,21 @@ fn render_help(f: &mut Frame) {
         Line::from("  Esc          - Close modal/menu"),
         Line::from(""),
         Line::from(Span::styled("Document Actions", Style::default().fg(Color::Cyan))),
-        Line::from("  c            - Create document"),
+        Line::from("  c            - Create document (as child of selected)"),
+        Line::from("  e            - Edit document (in vim mode)"),
         Line::from("  u            - Update document"),
         Line::from("  d            - Delete document"),
         Line::from("  /            - Search documents"),
         Line::from("  a            - Archive document"),
         Line::from("  s            - Star document"),
         Line::from("  x            - Export document"),
+        Line::from(""),
+        Line::from(Span::styled("Vim Editing (in Edit mode)", Style::default().fg(Color::Cyan))),
+        Line::from("  i/a          - Insert mode"),
+        Line::from("  v            - Visual mode"),
+        Line::from("  hjkl         - Movement"),
+        Line::from("  u            - Undo | Ctrl+r - Redo"),
+        Line::from("  Esc          - Save & exit to view"),
         Line::from(""),
         Line::from(Span::styled("Press Esc to close", Style::default().fg(Color::Gray))),
     ];
@@ -263,6 +274,67 @@ fn render_message(f: &mut Frame, title: &str, message: &str) {
                 .border_style(Style::default().fg(Color::Cyan)),
         )
         .wrap(Wrap { trim: true });
+
+    f.render_widget(paragraph, area);
+}
+
+fn render_auth_setup(f: &mut Frame, selected: usize) {
+    let area = centered_rect(70, 50, f.area());
+
+    f.render_widget(Clear, area);
+
+    let options = vec![
+        ("1", "OAuth2 (Recommended)", "Automatic refresh, more secure"),
+        ("2", "API Token", "Simple setup with manual token"),
+        ("Q", "Exit", "Configure authentication via CLI"),
+    ];
+
+    let mut lines = vec![
+        Line::from(Span::styled(
+            "Authentication Required",
+            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from("No authentication configured. Choose a method:"),
+        Line::from(""),
+    ];
+
+    for (i, (key, title, desc)) in options.iter().enumerate() {
+        let style = if i == selected {
+            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::White)
+        };
+
+        let marker = if i == selected { ">> " } else { "   " };
+
+        lines.push(Line::from(vec![
+            Span::raw(marker),
+            Span::styled(*key, style.add_modifier(Modifier::BOLD)),
+            Span::styled(". ", style),
+            Span::styled(*title, style),
+        ]));
+        lines.push(Line::from(Span::styled(
+            format!("     {}", desc),
+            Style::default().fg(Color::Gray),
+        )));
+        lines.push(Line::from(""));
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        "↑/↓: Navigate | Enter/1/2: Select | Q: Quit",
+        Style::default().fg(Color::DarkGray),
+    )));
+
+    let paragraph = Paragraph::new(lines)
+        .block(
+            Block::default()
+                .title(" Outline TUI - Setup ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow)),
+        )
+        .alignment(Alignment::Left);
 
     f.render_widget(paragraph, area);
 }

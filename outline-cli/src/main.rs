@@ -1,5 +1,6 @@
 mod commands;
 mod config;
+mod output;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -13,6 +14,10 @@ use commands::{
 #[command(name = "outline-cli")]
 #[command(version, about, long_about = None)]
 struct Cli {
+    /// Output format (json or text)
+    #[arg(long, global = true, default_value = "text")]
+    output: String,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -76,27 +81,16 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Parse CLI args, but handle the case where no args are provided
-    let cli = match Cli::try_parse() {
-        Ok(cli) => cli,
-        Err(e) => {
-            // If it's a help request or no arguments, print help and exit cleanly
-            if e.kind() == clap::error::ErrorKind::DisplayHelp
-                || e.kind() == clap::error::ErrorKind::DisplayVersion {
-                print!("{}", e);
-                std::process::exit(0);
-            }
-            // For other errors (like missing required args when a subcommand IS provided),
-            // still show the error but exit cleanly
-            print!("{}", e);
-            std::process::exit(0);
-        }
-    };
+    // Parse CLI args
+    let cli = Cli::parse();
+
+    // Parse output format
+    let output_format = output::OutputFormat::from_str(&cli.output)?;
 
     match cli.command {
         Commands::Auth { command } => command.execute().await,
         Commands::Config { command } => command.execute().await,
-        Commands::Documents { command } => command.execute().await,
+        Commands::Documents { command } => command.execute(output_format).await,
         Commands::Collections { command } => command.execute().await,
         Commands::Users { command } => command.execute().await,
         Commands::Comments { command } => command.execute().await,

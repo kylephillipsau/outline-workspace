@@ -23,7 +23,7 @@ impl Default for Pagination {
 }
 
 /// Pagination response from API
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PaginationResponse {
     pub limit: u32,

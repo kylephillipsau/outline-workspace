@@ -262,7 +262,7 @@ impl DeleteCollectionRequest {
 // ============================================================================
 
 /// Response from listing collections
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ListCollectionsResponse {
     pub data: Vec<Collection>,
     #[serde(skip_serializing_if = "Option::is_none")]

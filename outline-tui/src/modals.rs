@@ -34,6 +34,9 @@ pub enum ModalType {
         title: String,
         message: String,
     },
+    AuthSetup {
+        selected: usize,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -136,6 +139,30 @@ impl Modal {
 
     pub fn show_message(&mut self, title: String, message: String) {
         self.modal_type = ModalType::Message { title, message };
+    }
+
+    pub fn show_auth_setup(&mut self) {
+        self.modal_type = ModalType::AuthSetup { selected: 0 };
+    }
+
+    pub fn get_auth_choice(&self) -> Option<usize> {
+        if let ModalType::AuthSetup { selected } = &self.modal_type {
+            Some(*selected)
+        } else {
+            None
+        }
+    }
+
+    pub fn auth_setup_next(&mut self) {
+        if let ModalType::AuthSetup { selected } = &mut self.modal_type {
+            *selected = if *selected >= 2 { 0 } else { *selected + 1 };
+        }
+    }
+
+    pub fn auth_setup_previous(&mut self) {
+        if let ModalType::AuthSetup { selected } = &mut self.modal_type {
+            *selected = if *selected == 0 { 2 } else { *selected - 1 };
+        }
     }
 
     /// Handle character input for text fields

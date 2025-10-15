@@ -553,7 +553,7 @@ impl SearchDocumentsRequestBuilder {
 // ============================================================================
 
 /// Response from listing documents
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ListDocumentsResponse {
     pub data: Vec<Document>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -561,7 +561,7 @@ pub struct ListDocumentsResponse {
 }
 
 /// Search result item with ranking and context
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SearchResult {
     pub ranking: f32,
     pub context: String,
@@ -569,7 +569,7 @@ pub struct SearchResult {
 }
 
 /// Response from searching documents
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SearchDocumentsResponse {
     pub data: Vec<SearchResult>,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -15,10 +15,19 @@ pub fn render_sidebar(f: &mut Frame, app: &mut App, area: Rect) {
     let is_focused = app.focused_pane == FocusedPane::Sidebar;
 
     // Build list items from sidebar items with tree indicators
-    let items: Vec<ListItem> = app
-        .sidebar_items
-        .iter()
-        .map(|item| {
+    let items: Vec<ListItem> = if app.is_loading && app.sidebar_items.is_empty() {
+        // Show loading indicator when no items yet
+        vec![
+            ListItem::new(Line::from("")),
+            ListItem::new(Line::from(Span::styled("Loading data...", Style::default().fg(Color::Yellow)))),
+            ListItem::new(Line::from("")),
+            ListItem::new(Line::from(Span::styled("Fetching collections and documents", Style::default().fg(Color::Gray)))),
+            ListItem::new(Line::from(Span::styled("This may take a moment...", Style::default().fg(Color::DarkGray)))),
+        ]
+    } else {
+        app.sidebar_items
+            .iter()
+            .map(|item| {
             let indent_level = item.indent_level();
             let icon = item.icon();
             let title = item.title();
@@ -52,8 +61,9 @@ pub fn render_sidebar(f: &mut Frame, app: &mut App, area: Rect) {
             };
 
             ListItem::new(line)
-        })
-        .collect();
+            })
+            .collect()
+    };
 
     // Determine border color based on focus
     let border_color = if is_focused {

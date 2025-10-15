@@ -20,10 +20,15 @@ use tracing::{info, debug};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize logging (always write to outline-tui.log)
-    let log_file = std::fs::File::create("outline-tui.log")?;
+    // Load environment variables from .env file (ignore errors if it doesn't exist)
+    let _ = dotenvy::dotenv();
+
+    // Initialize logging to file using tracing-appender (properly isolated from stdout)
+    let file_appender = tracing_appender::rolling::never(".", "outline-tui.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+
     tracing_subscriber::fmt()
-        .with_writer(log_file)
+        .with_writer(non_blocking)
         .with_ansi(false)
         .with_max_level(tracing::Level::DEBUG)
         .init();
@@ -60,9 +65,19 @@ async fn run_app(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     app: &mut App,
 ) -> Result<()> {
-    // Load initial data
-    if let Err(e) = load_collections_and_documents(app).await {
-        app.set_status(format!("Error loading data: {}", e));
+    use app::AppView;
+
+    // Check if authentication is configured
+    let auth_method = auth::get_auth_method();
+    if auth_method == auth::AuthMethod::None {
+        // Show authentication setup page
+        app.view = AppView::AuthSetup;
+    } else {
+        // Load initial data
+        app.view = AppView::Main;
+        if let Err(e) = load_collections_and_documents(app, Some(terminal)).await {
+            app.set_status(format!("Error loading data: {}", e));
+        }
     }
 
     loop {
@@ -100,15 +115,132 @@ async fn handle_key_event(
     key: KeyCode,
     modifiers: KeyModifiers,
 ) -> Result<()> {
-    // If a modal is open, handle modal keys first
-    if app.modal.is_open() {
-        handle_modal_keys(app, key, modifiers).await?;
-    } else {
-        // Normal key handling
-        match app.focused_pane {
-            FocusedPane::Sidebar => handle_sidebar_keys(app, key, modifiers).await?,
-            FocusedPane::Editor => handle_editor_keys(app, key, modifiers).await?,
+    use app::AppView;
+
+    // Check which view we're in
+    match app.view {
+        AppView::AuthSetup => {
+            handle_auth_keys(app, key).await?;
         }
+        AppView::Main => {
+            // If a modal is open, handle modal keys first
+            if app.modal.is_open() {
+                handle_modal_keys(app, key, modifiers).await?;
+            } else {
+                // Normal key handling
+                match app.focused_pane {
+                    FocusedPane::Sidebar => handle_sidebar_keys(app, key, modifiers).await?,
+                    FocusedPane::Editor => handle_editor_keys(app, key, modifiers).await?,
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn handle_auth_keys(app: &mut App, key: KeyCode) -> Result<()> {
+    use app::AppView;
+
+    // Check if we're in API token input mode
+    if app.auth_selected == 1 && !app.api_token_input.is_empty() || key == KeyCode::Backspace || key == KeyCode::Char('_') {
+        // In API token input mode
+        match key {
+            KeyCode::Char(c) if !c.is_control() => {
+                app.api_token_input.push(c);
+            }
+            KeyCode::Backspace => {
+                app.api_token_input.pop();
+            }
+            KeyCode::Enter if !app.api_token_input.is_empty() => {
+                // Save token and transition to main view
+                match auth::set_api_token(&app.api_token_input) {
+                    Ok(_) => {
+                        app.view = AppView::Main;
+                        app.set_status("API token saved! Loading data...".to_string());
+                        // Load data (no terminal for live updates here, will block)
+                        if let Err(e) = load_collections_and_documents(app, None).await {
+                            app.set_status(format!("Error loading data: {}", e));
+                        }
+                    }
+                    Err(e) => {
+                        app.set_status(format!("Failed to save API token: {}", e));
+                        app.api_token_input.clear();
+                    }
+                }
+            }
+            KeyCode::Esc => {
+                // Go back to auth menu
+                app.api_token_input.clear();
+            }
+            _ => {}
+        }
+        return Ok(());
+    }
+
+    // Auth menu navigation
+    match key {
+        KeyCode::Char('q') | KeyCode::Char('Q') => {
+            app.should_quit = true;
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            app.auth_selected = app.auth_selected.saturating_sub(1);
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            app.auth_selected = (app.auth_selected + 1).min(2);
+        }
+        KeyCode::Enter | KeyCode::Char('1') | KeyCode::Char('2') | KeyCode::Char('3') => {
+            let choice = match key {
+                KeyCode::Char('1') => 0,
+                KeyCode::Char('2') => 1,
+                KeyCode::Char('3') => 2,
+                _ => app.auth_selected,
+            };
+
+            match choice {
+                0 => {
+                    // OAuth2
+                    let oauth_config = Config::load_oauth2_config();
+                    if let Some(config) = oauth_config {
+                        app.set_status("Opening browser for OAuth2 authorization...".to_string());
+
+                        // Store config in keyring
+                        if let Err(e) = auth::set_oauth2_config(&config) {
+                            app.set_status(format!("Failed to store OAuth2 config: {}", e));
+                            return Ok(());
+                        }
+
+                        // Start OAuth2 flow
+                        match auth::oauth2_authorize(config, vec!["read".to_string(), "write".to_string()]).await {
+                            Ok(_tokens) => {
+                                app.view = AppView::Main;
+                                app.set_status("OAuth2 authenticated! Loading data...".to_string());
+                                // Load data (no terminal for live updates here, will block)
+                                if let Err(e) = load_collections_and_documents(app, None).await {
+                                    app.set_status(format!("Error loading data: {}", e));
+                                }
+                            }
+                            Err(e) => {
+                                app.set_status(format!("OAuth2 authentication failed: {}", e));
+                            }
+                        }
+                    } else {
+                        app.set_status("OAuth2 credentials not found. Please configure .env file.".to_string());
+                    }
+                }
+                1 => {
+                    // API Token - trigger input mode by setting a space
+                    app.api_token_input = " ".to_string();
+                    app.api_token_input.clear();
+                }
+                2 => {
+                    // Exit
+                    app.should_quit = true;
+                }
+                _ => {}
+            }
+        }
+        _ => {}
     }
 
     Ok(())
@@ -147,14 +279,28 @@ async fn handle_modal_keys(
                 app.modal.close();
             }
         }
-        ModalType::TextInput { .. } => {
+        ModalType::TextInput { title, .. } => {
             match key {
                 KeyCode::Esc => {
                     app.modal.close();
                 }
                 KeyCode::Enter => {
-                    if let Some(action) = app.modal.get_pending_action() {
-                        if let Some(input) = app.modal.get_text_input() {
+                    if let Some(input) = app.modal.get_text_input() {
+                        // Check if this is API token setup
+                        if title == "API Token Setup" {
+                            app.modal.close();
+                            match auth::set_api_token(&input) {
+                                Ok(_) => {
+                                    app.modal.show_message("Success".to_string(),
+                                        "API token saved successfully! Loading data...".to_string());
+                                    // Data will be loaded on modal close
+                                }
+                                Err(e) => {
+                                    app.modal.show_message("Error".to_string(),
+                                        format!("Failed to save API token: {}", e));
+                                }
+                            }
+                        } else if let Some(action) = app.modal.get_pending_action() {
                             app.modal.close();
                             execute_action_direct(app, action, vec![input]).await?;
                         }
@@ -173,12 +319,23 @@ async fn handle_modal_keys(
             match key {
                 KeyCode::Esc => {
                     app.modal.close();
+                    app.pending_doc_create = None; // Clear pending context
                 }
                 KeyCode::Enter => {
                     if let Some(action) = app.modal.get_pending_action() {
                         if let Some(inputs) = app.modal.get_multi_input() {
                             app.modal.close();
-                            execute_action_direct(app, action, inputs).await?;
+
+                            // Special handling for CreateDocument
+                            if action == actions::Action::CreateDocument && app.pending_doc_create.is_some() {
+                                if !inputs.is_empty() {
+                                    if let Err(e) = complete_document_creation(app, inputs[0].clone()).await {
+                                        app.set_status(format!("Failed to create document: {}", e));
+                                    }
+                                }
+                            } else {
+                                execute_action_direct(app, action, inputs).await?;
+                            }
                         }
                     }
                 }
@@ -369,7 +526,7 @@ async fn handle_sidebar_keys(
         KeyCode::Char('r') => {
             // Refresh data
             app.set_status("Refreshing...".to_string());
-            if let Err(e) = load_collections_and_documents(app).await {
+            if let Err(e) = load_collections_and_documents(app, None).await {
                 app.set_status(format!("Error refreshing: {}", e));
             } else {
                 app.set_status("Refreshed!".to_string());
@@ -383,7 +540,7 @@ async fn handle_sidebar_keys(
             app.modal.show_help();
         }
         KeyCode::Char('c') => {
-            execute_action_with_prompt(app, Action::CreateDocument).await?;
+            create_new_document(app).await?;
         }
         KeyCode::Char('/') => {
             execute_action_with_prompt(app, Action::SearchDocuments).await?;
@@ -397,10 +554,16 @@ async fn handle_sidebar_keys(
 async fn handle_editor_keys(
     app: &mut App,
     key: KeyCode,
-    _modifiers: KeyModifiers,
+    modifiers: KeyModifiers,
 ) -> Result<()> {
     use actions::Action;
 
+    // If in edit mode, handle vim keybindings
+    if app.editor_mode == EditorMode::Edit {
+        return handle_vim_keys(app, key, modifiers).await;
+    }
+
+    // View mode keybindings
     match key {
         KeyCode::Char('q') => {
             app.should_quit = true;
@@ -427,14 +590,13 @@ async fn handle_editor_keys(
             app.scroll_to_bottom();
         }
         KeyCode::Char('e') => {
-            app.toggle_editor_mode();
-        }
-        KeyCode::Esc => {
-            if app.editor_mode == EditorMode::Edit {
+            if app.current_document.is_some() {
+                // Entering edit mode - load text into editor
+                app.load_text_into_editor();
                 app.toggle_editor_mode();
             }
         }
-        // Keyboard shortcuts
+        // Keyboard shortcuts (only in view mode)
         KeyCode::Char('m') | KeyCode::Char(':') => {
             app.modal.show_action_menu();
         }
@@ -462,9 +624,258 @@ async fn handle_editor_keys(
     Ok(())
 }
 
+async fn handle_vim_keys(
+    app: &mut App,
+    key: KeyCode,
+    modifiers: KeyModifiers,
+) -> Result<()> {
+    use app::VimMode;
+    use crossterm::event::KeyEvent;
+
+    match app.vim_mode {
+        VimMode::Normal => {
+            match key {
+                // Mode switches
+                KeyCode::Char('i') => {
+                    app.vim_mode = VimMode::Insert;
+                }
+                KeyCode::Char('I') => {
+                    app.textarea.move_cursor(tui_textarea::CursorMove::Head);
+                    app.vim_mode = VimMode::Insert;
+                }
+                KeyCode::Char('a') => {
+                    app.textarea.move_cursor(tui_textarea::CursorMove::Forward);
+                    app.vim_mode = VimMode::Insert;
+                }
+                KeyCode::Char('A') => {
+                    app.textarea.move_cursor(tui_textarea::CursorMove::End);
+                    app.vim_mode = VimMode::Insert;
+                }
+                KeyCode::Char('v') => {
+                    app.vim_mode = VimMode::Visual;
+                    app.textarea.start_selection();
+                }
+                KeyCode::Char('o') => {
+                    app.textarea.move_cursor(tui_textarea::CursorMove::End);
+                    app.textarea.insert_newline();
+                    app.vim_mode = VimMode::Insert;
+                }
+                KeyCode::Char('O') => {
+                    app.textarea.move_cursor(tui_textarea::CursorMove::Head);
+                    app.textarea.insert_newline();
+                    app.textarea.move_cursor(tui_textarea::CursorMove::Up);
+                    app.vim_mode = VimMode::Insert;
+                }
+                // Movement
+                KeyCode::Char('h') | KeyCode::Left => {
+                    app.textarea.move_cursor(tui_textarea::CursorMove::Back);
+                }
+                KeyCode::Char('j') | KeyCode::Down => {
+                    app.textarea.move_cursor(tui_textarea::CursorMove::Down);
+                }
+                KeyCode::Char('k') | KeyCode::Up => {
+                    app.textarea.move_cursor(tui_textarea::CursorMove::Up);
+                }
+                KeyCode::Char('l') | KeyCode::Right => {
+                    app.textarea.move_cursor(tui_textarea::CursorMove::Forward);
+                }
+                KeyCode::Char('w') => {
+                    app.textarea.move_cursor(tui_textarea::CursorMove::WordForward);
+                }
+                KeyCode::Char('b') => {
+                    app.textarea.move_cursor(tui_textarea::CursorMove::WordBack);
+                }
+                KeyCode::Char('0') | KeyCode::Home => {
+                    app.textarea.move_cursor(tui_textarea::CursorMove::Head);
+                }
+                KeyCode::Char('$') | KeyCode::End => {
+                    app.textarea.move_cursor(tui_textarea::CursorMove::End);
+                }
+                KeyCode::Char('g') => {
+                    app.textarea.move_cursor(tui_textarea::CursorMove::Top);
+                }
+                KeyCode::Char('G') => {
+                    app.textarea.move_cursor(tui_textarea::CursorMove::Bottom);
+                }
+                // Editing
+                KeyCode::Char('x') => {
+                    app.textarea.delete_next_char();
+                }
+                KeyCode::Char('u') => {
+                    app.textarea.undo();
+                }
+                KeyCode::Char('r') if modifiers.contains(KeyModifiers::CONTROL) => {
+                    app.textarea.redo();
+                }
+                // Exit to view mode (save changes)
+                KeyCode::Esc => {
+                    if let Err(e) = save_document_changes(app).await {
+                        app.set_status(format!("Error saving document: {}", e));
+                    } else {
+                        app.toggle_editor_mode();
+                    }
+                }
+                _ => {}
+            }
+        }
+        VimMode::Insert => {
+            match key {
+                KeyCode::Esc => {
+                    app.vim_mode = VimMode::Normal;
+                }
+                _ => {
+                    // Pass input to textarea
+                    let input = tui_textarea::Input::from(KeyEvent::new(key, modifiers));
+                    app.textarea.input(input);
+                }
+            }
+        }
+        VimMode::Visual => {
+            match key {
+                KeyCode::Esc => {
+                    app.vim_mode = VimMode::Normal;
+                    app.textarea.cancel_selection();
+                }
+                KeyCode::Char('y') => {
+                    app.textarea.copy();
+                    app.vim_mode = VimMode::Normal;
+                    app.textarea.cancel_selection();
+                }
+                KeyCode::Char('d') | KeyCode::Char('x') => {
+                    app.textarea.cut();
+                    app.vim_mode = VimMode::Normal;
+                }
+                // Movement in visual mode
+                KeyCode::Char('h') | KeyCode::Left => {
+                    app.textarea.move_cursor(tui_textarea::CursorMove::Back);
+                }
+                KeyCode::Char('j') | KeyCode::Down => {
+                    app.textarea.move_cursor(tui_textarea::CursorMove::Down);
+                }
+                KeyCode::Char('k') | KeyCode::Up => {
+                    app.textarea.move_cursor(tui_textarea::CursorMove::Up);
+                }
+                KeyCode::Char('l') | KeyCode::Right => {
+                    app.textarea.move_cursor(tui_textarea::CursorMove::Forward);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Create a new document with intuitive flow
+async fn create_new_document(app: &mut App) -> Result<()> {
+    use modals::InputField;
+
+    // Get parent context from sidebar selection
+    let (parent_id, collection_id) = if let Some(item) = app.selected_sidebar_item() {
+        match item {
+            SidebarItem::Document(doc, _) => {
+                // Selected a document - use it as parent, same collection
+                (Some(doc.id.clone()), doc.collection_id.clone())
+            }
+            SidebarItem::Collection(col) => {
+                // Selected a collection - no parent, use collection
+                (None, Some(col.id.clone()))
+            }
+        }
+    } else {
+        (None, None)
+    };
+
+    // Store context for when user submits
+    app.pending_doc_create = Some((parent_id, collection_id));
+
+    // Show simple title input
+    let field = InputField::new("Document Title", "My New Document");
+    app.modal.show_multi_input(
+        "Create Document".to_string(),
+        vec![field],
+        actions::Action::CreateDocument,
+    );
+
+    Ok(())
+}
+
+/// Save document changes to server
+async fn save_document_changes(app: &mut App) -> Result<()> {
+    use outline_api::UpdateDocumentRequest;
+
+    let doc = app.current_document.as_ref()
+        .ok_or_else(|| anyhow::anyhow!("No document loaded"))?;
+
+    // Get updated text from editor
+    let new_text = app.get_text_from_editor();
+    app.document_text = new_text.clone();
+
+    // Update document on server
+    let client = create_api_client().await?;
+    let request = UpdateDocumentRequest {
+        id: doc.id.clone(),
+        title: None,
+        text: Some(new_text),
+        emoji: None,
+        append: None,
+        publish: None,
+        done: None,
+    };
+
+    let updated = client.update_document(request).await?;
+    app.set_status(format!("Saved: {}", updated.title));
+
+    // Update current document with server response
+    app.current_document = Some(updated);
+
+    Ok(())
+}
+
+/// Complete document creation and open in editor
+async fn complete_document_creation(app: &mut App, title: String) -> Result<()> {
+    use outline_api::CreateDocumentRequest;
+
+    let (parent_id, collection_id) = app.pending_doc_create.take()
+        .ok_or_else(|| anyhow::anyhow!("No pending document creation context"))?;
+
+    let client = create_api_client().await?;
+
+    // Create document with minimal content
+    let request = CreateDocumentRequest {
+        title: title.clone(),
+        text: String::new(), // Empty text - user will write in editor
+        collection_id,
+        parent_document_id: parent_id,
+        template_id: None,
+        template: None,
+        emoji: None,
+        publish: Some(true),
+    };
+
+    let doc = client.create_document(request).await?;
+    app.set_status(format!("Created: {}", doc.title));
+
+    // Load the new document
+    app.current_document = Some(doc.clone());
+    app.document_text = doc.text.clone();
+
+    // Enter edit mode immediately
+    app.load_text_into_editor();
+    app.editor_mode = EditorMode::Edit;
+    app.vim_mode = app::VimMode::Insert; // Start in insert mode for new doc
+
+    Ok(())
+}
+
 /// Execute an action that requires user input
 async fn execute_action_with_prompt(app: &mut App, action: actions::Action) -> Result<()> {
     use executor::{action_requires_input, get_input_fields_for_action};
+
+    // Special handling for CreateDocument - use custom flow
+    if action == actions::Action::CreateDocument {
+        return create_new_document(app).await;
+    }
 
     if action_requires_input(&action) {
         let fields = get_input_fields_for_action(&action, app);
@@ -505,13 +916,13 @@ async fn execute_action_direct(app: &mut App, action: actions::Action, input_val
 
     app.set_status("Executing...".to_string());
 
-    let client = create_api_client()?;
+    let client = create_api_client().await?;
     match execute_action(action.clone(), app, &client, input_values).await {
         Ok(message) => {
             app.modal.show_message("Success".to_string(), message);
             // Refresh data after certain actions
             if should_refresh_after_action(&action) {
-                let _ = load_collections_and_documents(app).await;
+                let _ = load_collections_and_documents(app, None).await;
             }
         }
         Err(e) => {
@@ -533,20 +944,27 @@ fn should_refresh_after_action(action: &actions::Action) -> bool {
 }
 
 /// Create an authenticated API client
-fn create_api_client() -> Result<OutlineClient> {
+async fn create_api_client() -> Result<OutlineClient> {
     let config = Config::load()?;
     let api_base_url = config.get_api_base_url()?;
-    let api_token = auth::get_api_token()?;
+    let api_token = auth::get_access_token().await?;
     Ok(OutlineClient::new(api_base_url)?.with_token(api_token))
 }
 
-async fn load_collections_and_documents(app: &mut App) -> Result<()> {
+async fn load_collections_and_documents(
+    app: &mut App,
+    mut terminal: Option<&mut Terminal<CrosstermBackend<io::Stdout>>>,
+) -> Result<()> {
     use outline_api::{ListCollectionsRequest, ListDocumentsRequest, Document};
     use std::collections::HashMap;
 
     app.is_loading = true;
+    app.set_status("Loading collections...".to_string());
+    if let Some(term) = terminal.as_deref_mut() {
+        term.draw(|f| ui::render(f, app))?;
+    }
 
-    let client = create_api_client()?;
+    let client = create_api_client().await?;
 
     // Load collections
     let request = ListCollectionsRequest::new();
@@ -555,7 +973,12 @@ async fn load_collections_and_documents(app: &mut App) -> Result<()> {
     // Build sidebar items
     let mut sidebar_items = Vec::new();
 
-    for collection in collections_response.data {
+    let total_collections = collections_response.data.len();
+    for (idx, collection) in collections_response.data.iter().enumerate() {
+        app.set_status(format!("Loading collection {} of {}: {}", idx + 1, total_collections, collection.name));
+        if let Some(term) = terminal.as_deref_mut() {
+            term.draw(|f| ui::render(f, app))?;
+        }
         sidebar_items.push(SidebarItem::Collection(collection.clone()));
 
         // Load documents for this collection
@@ -576,7 +999,15 @@ async fn load_collections_and_documents(app: &mut App) -> Result<()> {
 
             // Fetch full document info to get emojis (simple approach)
             let mut docs_with_emoji = Vec::new();
-            for doc in docs_response.data {
+            let total_docs = docs_response.data.len();
+            for (doc_idx, doc) in docs_response.data.into_iter().enumerate() {
+                if total_docs > 5 {
+                    // Only show detailed status for collections with many documents
+                    app.set_status(format!("Loading {} ({}/{})", collection.name, doc_idx + 1, total_docs));
+                    if let Some(term) = terminal.as_deref_mut() {
+                        term.draw(|f| ui::render(f, app))?;
+                    }
+                }
                 debug!("Fetching full document info for: {} ({})", doc.title, doc.id);
 
                 // Fetch full document to get emoji
@@ -664,13 +1095,14 @@ async fn load_collections_and_documents(app: &mut App) -> Result<()> {
     }).count();
 
     info!("Loaded {} documents, {} have emojis", doc_count, emoji_count);
+    app.set_status(format!("Loaded {} collections and {} documents", total_collections, doc_count));
 
     Ok(())
 }
 
 async fn load_document(app: &mut App, doc_id: String) -> Result<()> {
     info!("Loading document: {}", doc_id);
-    let client = create_api_client()?;
+    let client = create_api_client().await?;
 
     debug!("Fetching document from API...");
     let document = client.get_document(doc_id.clone()).await?;
@@ -679,12 +1111,16 @@ async fn load_document(app: &mut App, doc_id: String) -> Result<()> {
     app.scroll_offset = 0;
     info!("Document loaded successfully");
 
-    // COLLABORATION DISABLED: Prevents UI freezing
-    // The WebSocket connection blocks even with timeout, causing the TUI to freeze
-    // when opening documents. Collaboration can be re-enabled once we implement
-    // a proper non-blocking background task architecture.
+    // Start collaboration for this document
+    let config = Config::load()?;
+    let api_base_url = config.get_api_base_url()?;
+    let api_token = auth::get_access_token().await?;
 
-    // TODO: Implement collaboration in a separate background task that doesn't block the UI
+    if let Err(e) = app.start_collaboration(api_base_url, api_token, doc_id).await {
+        debug!("Failed to start collaboration: {}", e);
+        app.set_status(format!("Note: Collaboration not available - {}", e));
+        // Don't fail the whole operation, just log it
+    }
 
     Ok(())
 }

@@ -3,6 +3,7 @@ use outline_api::collaboration::{CollaborationClient, CollaborationEvent, Connec
 use ratatui::layout::Rect;
 use ratatui::widgets::ListState;
 use tokio::sync::mpsc;
+use tui_textarea::TextArea;
 use crate::modals::Modal;
 
 /// Which pane is currently focused
@@ -17,6 +18,31 @@ pub enum FocusedPane {
 pub enum EditorMode {
     View,
     Edit,
+}
+
+/// Vim mode for text editing
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VimMode {
+    Normal,
+    Insert,
+    Visual,
+}
+
+/// Application view state
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AppView {
+    /// Authentication setup page
+    AuthSetup,
+    /// Main application view
+    Main,
+}
+
+/// Auth setup selection
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthChoice {
+    OAuth2,
+    ApiToken,
+    Exit,
 }
 
 /// Item in the sidebar tree
@@ -54,11 +80,26 @@ pub struct App {
     /// Whether the app should quit
     pub should_quit: bool,
 
+    /// Current application view
+    pub view: AppView,
+
     /// Currently focused pane
     pub focused_pane: FocusedPane,
 
     /// Editor mode
     pub editor_mode: EditorMode,
+
+    /// Auth setup selected option
+    pub auth_selected: usize,
+
+    /// API token input buffer (for auth setup)
+    pub api_token_input: String,
+
+    /// Text editor widget (for edit mode)
+    pub textarea: TextArea<'static>,
+
+    /// Vim mode state
+    pub vim_mode: VimMode,
 
     /// Sidebar items (collections and documents in tree order)
     pub sidebar_items: Vec<SidebarItem>,
@@ -102,6 +143,9 @@ pub struct App {
 
     /// Sidebar rendered area (for mouse click detection)
     pub sidebar_area: Option<Rect>,
+
+    /// Pending document creation context (parent_id, collection_id)
+    pub pending_doc_create: Option<(Option<String>, Option<String>)>,
 }
 
 impl App {
@@ -111,8 +155,13 @@ impl App {
 
         Self {
             should_quit: false,
+            view: AppView::Main,
             focused_pane: FocusedPane::Sidebar,
             editor_mode: EditorMode::View,
+            auth_selected: 0,
+            api_token_input: String::new(),
+            textarea: TextArea::default(),
+            vim_mode: VimMode::Normal,
             sidebar_items: Vec::new(),
             sidebar_state,
             current_document: None,
@@ -126,6 +175,7 @@ impl App {
             collaboration_status: ConnectionStatus::Disconnected,
             modal: Modal::new(),
             sidebar_area: None,
+            pending_doc_create: None,
         }
     }
 
@@ -265,6 +315,22 @@ impl App {
         self.status_message = Some(message);
     }
 
+    /// Load document text into the textarea editor
+    pub fn load_text_into_editor(&mut self) {
+        let lines: Vec<String> = self.document_text.lines().map(|s| s.to_string()).collect();
+        self.textarea = if lines.is_empty() {
+            TextArea::default()
+        } else {
+            TextArea::new(lines)
+        };
+        self.vim_mode = VimMode::Normal;
+    }
+
+    /// Get text from the textarea editor
+    pub fn get_text_from_editor(&self) -> String {
+        self.textarea.lines().join("\n")
+    }
+
     /// Start collaboration for the current document
     #[allow(dead_code)]
     pub async fn start_collaboration(
@@ -285,7 +351,7 @@ impl App {
         doc_sync.set_text(&self.document_text)?;
 
         // Start collaboration client
-        let (client, rx) = start_collaboration(api_base_url, api_token, document_id).await?;
+        let (mut client, rx) = start_collaboration(api_base_url, api_token, document_id).await?;
 
         // Connect to WebSocket
         client.connect().await?;
@@ -329,7 +395,18 @@ impl App {
                     self.set_status(format!("Collaboration: {:?}", status));
                 }
                 CollaborationEvent::DocumentUpdated(content) => {
-                    self.document_text = content;
+                    self.document_text = content.clone();
+
+                    // If in edit mode, update the textarea with remote changes
+                    if self.editor_mode == EditorMode::Edit {
+                        let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+                        self.textarea = if lines.is_empty() {
+                            TextArea::default()
+                        } else {
+                            TextArea::new(lines)
+                        };
+                    }
+
                     if let Some(doc_sync) = &self.document_sync {
                         if let Ok(synced_text) = doc_sync.get_text() {
                             self.document_text = synced_text;

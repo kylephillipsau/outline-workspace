@@ -274,7 +274,7 @@ pub enum DocumentsCommands {
 }
 
 impl DocumentsCommands {
-    pub async fn execute(&self) -> Result<()> {
+    pub async fn execute(&self, output_format: crate::output::OutputFormat) -> Result<()> {
         let config = Config::load()?;
         let api_base_url = config.get_api_base_url()?;
 
@@ -334,24 +334,30 @@ impl DocumentsCommands {
                     }
                 }
 
-                println!("Documents (showing {} results):", all_documents.len());
-                println!();
+                if output_format.is_json() {
+                    crate::output::output_json(&all_documents)?;
+                } else {
+                    println!("Documents (showing {} results):", all_documents.len());
+                    println!();
 
-                // Build a tree structure
-                display_document_tree(&all_documents);
+                    // Build a tree structure
+                    display_document_tree(&all_documents);
+                }
             }
 
             DocumentsCommands::Get { id, text_only } => {
                 let doc = client.get_document(id.clone()).await?;
 
-                if *text_only {
+                if output_format.is_json() {
+                    crate::output::output_json(&doc)?;
+                } else if *text_only {
                     println!("{}", doc.text);
                 } else {
-                    let emoji = doc.emoji.unwrap_or_else(|| "📄".to_string());
+                    let emoji = doc.emoji.as_deref().unwrap_or("📄");
                     println!("{} {}", emoji, doc.title);
                     println!("ID: {}", doc.id);
                     println!("URL ID: {}", doc.url_id);
-                    println!("Collection: {}", doc.collection_id.unwrap_or_else(|| "None".to_string()));
+                    println!("Collection: {}", doc.collection_id.as_deref().unwrap_or("None"));
                     println!("Created: {}", doc.created_at);
                     println!("Updated: {}", doc.updated_at);
                     println!("\n--- Content ---\n");
@@ -380,9 +386,13 @@ impl DocumentsCommands {
 
                 let doc = client.create_document(request).await?;
 
-                println!("Document created successfully!");
-                println!("ID: {}", doc.id);
-                println!("Title: {}", doc.title);
+                if output_format.is_json() {
+                    crate::output::output_json(&doc)?;
+                } else {
+                    println!("Document created successfully!");
+                    println!("ID: {}", doc.id);
+                    println!("Title: {}", doc.title);
+                }
             }
 
             DocumentsCommands::Update {
@@ -404,9 +414,13 @@ impl DocumentsCommands {
 
                 let doc = client.update_document(request).await?;
 
-                println!("Document updated successfully!");
-                println!("ID: {}", doc.id);
-                println!("Title: {}", doc.title);
+                if output_format.is_json() {
+                    crate::output::output_json(&doc)?;
+                } else {
+                    println!("Document updated successfully!");
+                    println!("ID: {}", doc.id);
+                    println!("Title: {}", doc.title);
+                }
             }
 
             DocumentsCommands::Delete { id, permanent } => {
@@ -463,19 +477,23 @@ impl DocumentsCommands {
                     }
                 }
 
-                println!("Search results for '{}' ({} found):", query, all_documents.len());
-                println!();
-
-                for result in all_documents {
-                    let doc = &result.document;
-                    let emoji = doc.emoji.as_deref().unwrap_or("📄");
-                    println!("{} {} ({})", emoji, doc.title, doc.id);
-                    println!("  Relevance: {:.2}", result.ranking);
-                    println!("  Collection: {}", doc.collection_id.as_deref().unwrap_or("None"));
-                    if !doc.updated_at.is_empty() {
-                        println!("  Updated: {}", doc.updated_at);
-                    }
+                if output_format.is_json() {
+                    crate::output::output_json(&all_documents)?;
+                } else {
+                    println!("Search results for '{}' ({} found):", query, all_documents.len());
                     println!();
+
+                    for result in &all_documents {
+                        let doc = &result.document;
+                        let emoji = doc.emoji.as_deref().unwrap_or("📄");
+                        println!("{} {} ({})", emoji, doc.title, doc.id);
+                        println!("  Relevance: {:.2}", result.ranking);
+                        println!("  Collection: {}", doc.collection_id.as_deref().unwrap_or("None"));
+                        if !doc.updated_at.is_empty() {
+                            println!("  Updated: {}", doc.updated_at);
+                        }
+                        println!();
+                    }
                 }
             }
 

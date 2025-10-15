@@ -1,4 +1,4 @@
-use crate::app::{App, EditorMode, FocusedPane};
+use crate::app::{App, EditorMode, FocusedPane, VimMode};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -9,7 +9,7 @@ use ratatui::{
 use tui_markdown::from_str as markdown_from_str;
 
 /// Render the document editor/viewer pane
-pub fn render_editor(f: &mut Frame, app: &App, area: Rect) {
+pub fn render_editor(f: &mut Frame, app: &mut App, area: Rect) {
     let is_focused = app.focused_pane == FocusedPane::Editor;
 
     // Split into title and content areas
@@ -24,8 +24,11 @@ pub fn render_editor(f: &mut Frame, app: &App, area: Rect) {
     // Render title
     render_document_title(f, app, is_focused, chunks[0]);
 
-    // Render content
-    render_document_content(f, app, is_focused, chunks[1]);
+    // Render content based on mode
+    match app.editor_mode {
+        EditorMode::View => render_document_content(f, app, is_focused, chunks[1]),
+        EditorMode::Edit => render_text_editor(f, app, is_focused, chunks[1]),
+    }
 }
 
 /// Render the document title
@@ -51,7 +54,14 @@ fn render_document_title(f: &mut Frame, app: &App, is_focused: bool, area: Rect)
 
     let mode_indicator = match app.editor_mode {
         EditorMode::View => Span::styled(" [VIEW]", Style::default().fg(Color::Green)),
-        EditorMode::Edit => Span::styled(" [EDIT]", Style::default().fg(Color::Yellow)),
+        EditorMode::Edit => {
+            let vim_mode_text = match app.vim_mode {
+                VimMode::Normal => "NORMAL",
+                VimMode::Insert => "INSERT",
+                VimMode::Visual => "VISUAL",
+            };
+            Span::styled(format!(" [{}]", vim_mode_text), Style::default().fg(Color::Yellow))
+        }
     };
 
     // Add collaboration status indicator
@@ -60,6 +70,7 @@ fn render_document_title(f: &mut Frame, app: &App, is_focused: bool, area: Rect)
         match &app.collaboration_status {
             ConnectionStatus::Connected => Span::styled(" [COLLAB]", Style::default().fg(Color::Cyan)),
             ConnectionStatus::Connecting => Span::styled(" [CONNECTING...]", Style::default().fg(Color::Yellow)),
+            ConnectionStatus::Synced => Span::styled(" [SYNCED]", Style::default().fg(Color::Green)),
             ConnectionStatus::Disconnected => Span::raw(""),
             ConnectionStatus::Error(e) => Span::styled(
                 format!(" [ERROR: {}]", e),
@@ -95,12 +106,10 @@ fn render_document_content(f: &mut Frame, app: &App, is_focused: bool, area: Rec
         Color::Gray
     };
 
-    let content_text = if app.document_text.is_empty() {
-        if app.current_document.is_some() {
-            Text::from("Loading document content...")
-        } else {
-            Text::from("Select a document from the sidebar to view its content.")
-        }
+    let content_text = if app.current_document.is_none() {
+        Text::from("Select a document from the sidebar to view its content.")
+    } else if app.document_text.is_empty() {
+        Text::from("(Empty document - press 'e' to edit)")
     } else {
         // Parse markdown and convert to ratatui Text
         markdown_from_str(&app.document_text)
@@ -118,4 +127,31 @@ fn render_document_content(f: &mut Frame, app: &App, is_focused: bool, area: Rec
         .scroll((app.scroll_offset, 0));
 
     f.render_widget(content, area);
+}
+
+/// Render the text editor (edit mode)
+fn render_text_editor(f: &mut Frame, app: &mut App, is_focused: bool, area: Rect) {
+    let border_color = if is_focused {
+        Color::Cyan
+    } else {
+        Color::Gray
+    };
+
+    let mut textarea = app.textarea.clone();
+    textarea.set_block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(" Edit Mode (Esc to save & return to view) ")
+            .border_style(Style::default().fg(border_color)),
+    );
+
+    // Set cursor style based on vim mode
+    let cursor_style = match app.vim_mode {
+        VimMode::Normal => Style::default().bg(Color::Gray),
+        VimMode::Insert => Style::default().bg(Color::Green),
+        VimMode::Visual => Style::default().bg(Color::Blue),
+    };
+    textarea.set_cursor_style(cursor_style);
+
+    f.render_widget(&textarea, area);
 }
