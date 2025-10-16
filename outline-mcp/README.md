@@ -6,6 +6,74 @@ Model Context Protocol (MCP) server for Outline, enabling AI assistants like Cla
 
 `outline-mcp` provides AI access to Outline's document management system through the Model Context Protocol. This allows AI assistants to list, search, create, update, and manage documents and collections in your Outline workspace.
 
+## Quick Start
+
+Get up and running with the Outline MCP server in 5 minutes:
+
+### 1. Build the Server
+
+```bash
+cd outline-workspace
+cargo build --release -p outline-mcp
+```
+
+The binary will be created at `target/release/outline-mcp` (or `outline-mcp.exe` on Windows).
+
+### 2. Configure Authentication
+
+First, build the CLI tool if you haven't already:
+
+```bash
+cargo build --release -p outline-cli
+```
+
+Then configure your Outline instance and API token:
+
+```bash
+# Set your Outline instance URL
+./target/release/outline-cli config set-instance https://outline.yourdomain.com
+
+# Set your API token (get from Outline Settings > API & Apps)
+./target/release/outline-cli auth set-token YOUR_API_TOKEN
+
+# Verify it works
+./target/release/outline-cli auth status
+```
+
+### 3. Add to Claude Desktop Config
+
+Edit your Claude Desktop configuration file:
+
+**Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+**macOS/Linux:** `~/.config/Claude/claude_desktop_config.json`
+
+Add the MCP server configuration:
+
+```json
+{
+  "mcpServers": {
+    "outline": {
+      "command": "C:\\Users\\YourName\\dev\\outline-workspace\\target\\release\\outline-mcp.exe"
+    }
+  }
+}
+```
+
+*Replace the path with your actual workspace path. Use forward slashes on macOS/Linux.*
+
+### 4. Restart Claude Desktop
+
+Quit and restart Claude Desktop (or Claude Code) to load the MCP server.
+
+### 5. Verify It's Working
+
+In Claude, try asking:
+- "List my Outline collections"
+- "Search for documents about [topic]"
+- "Create a new document titled 'Test' with content 'Hello World'"
+
+You should see Claude using the `outline_*` tools to interact with your Outline workspace.
+
 ## Architecture
 
 The MCP server is built on top of the `outline-api` crate, providing a clean separation of concerns:
