@@ -6,11 +6,11 @@ use outline_api::{
 };
 use rmcp::{
     model::*,
-    tool_router, tool,
+    tool_router, tool, tool_handler,
     handler::server::{ServerHandler, tool::ToolRouter, wrapper::Parameters},
     ServiceExt,
 };
-use rmcp::model::ErrorCode;
+use rmcp::model::{ErrorCode, ServerInfo, ServerCapabilities, ProtocolVersion, Implementation};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -318,7 +318,19 @@ impl OutlineServer {
 }
 
 // Implement ServerHandler trait
-impl ServerHandler for OutlineServer {}
+#[tool_handler]
+impl ServerHandler for OutlineServer {
+    fn get_info(&self) -> ServerInfo {
+        ServerInfo {
+            protocol_version: ProtocolVersion::V_2024_11_05,
+            capabilities: ServerCapabilities::builder()
+                .enable_tools()
+                .build(),
+            server_info: Implementation::from_build_env(),
+            instructions: Some("MCP server for Outline documentation workspace. Provides access to documents, collections, and search capabilities.".to_string()),
+        }
+    }
+}
 
 // ============================================================================
 // Server Runner
