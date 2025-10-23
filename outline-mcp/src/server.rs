@@ -205,10 +205,27 @@ impl OutlineServer {
     ) -> Result<CallToolResult, ErrorData> {
         let params = params.0;
 
+        // Log the text being updated to help debug escaping issues
+        if let Some(ref text) = params.text {
+            tracing::debug!("Updating document {} with text length: {}", params.id, text.len());
+            // Log first 200 chars to see if brackets are escaped
+            let preview = if text.len() > 200 {
+                format!("{}...", &text[..200])
+            } else {
+                text.clone()
+            };
+            tracing::info!("Text preview:\n{}", preview);
+
+            // Check if brackets are escaped
+            if text.contains("!\\[") {
+                tracing::warn!("WARNING: Text contains escaped brackets !\\[");
+            }
+        }
+
         let request = UpdateDocumentRequest {
             id: params.id,
-            title: params.title,
-            text: params.text,
+            title: params.title.clone(),
+            text: params.text.clone(),
             emoji: None,
             append: None,
             publish: params.publish,
@@ -217,6 +234,12 @@ impl OutlineServer {
 
         let document = self.client.update_document(request).await
             .map_err(|e| ErrorData::new(ErrorCode(-32000), e.to_string(), None))?;
+
+        // Log what was returned after update
+        tracing::debug!("Document updated. Text length: {}", document.text.len());
+        if document.text.contains("!\\[") {
+            tracing::warn!("WARNING: Returned text contains escaped brackets !\\[");
+        }
 
         let json = serde_json::to_string_pretty(&document)
             .map_err(|e| ErrorData::new(ErrorCode(-32000), e.to_string(), None))?;
