@@ -28,60 +28,89 @@ pub struct OutlineServer {
 // Tool Input Types
 // ============================================================================
 
+/// Parameters for listing documents
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct ListDocumentsParams {
+    /// Filter to a specific collection. Get IDs from outline_collections_list.
     #[serde(rename = "collectionId")]
     pub collection_id: Option<String>,
+    /// Maximum documents to return (default: 25)
     pub limit: Option<u32>,
+    /// Number of documents to skip for pagination
     pub offset: Option<u32>,
 }
 
+/// Parameters for getting a single document
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct GetDocumentParams {
+    /// The document's unique identifier (UUID)
     pub id: String,
 }
 
+/// Parameters for creating a new document
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct CreateDocumentParams {
+    /// Document title (appears in navigation and search)
     pub title: String,
+    /// Document content in Markdown format
     pub text: String,
+    /// Place in a specific collection (get IDs from outline_collections_list)
     #[serde(rename = "collectionId")]
     pub collection_id: Option<String>,
+    /// Nest under another document for hierarchical structure
     #[serde(rename = "parentDocumentId")]
     pub parent_document_id: Option<String>,
+    /// Set true to publish immediately, false (default) creates draft
     pub publish: Option<bool>,
 }
 
+/// Parameters for updating an existing document
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct UpdateDocumentParams {
+    /// Document identifier to update
     pub id: String,
+    /// New document title (optional)
     pub title: Option<String>,
+    /// New document content in Markdown (replaces entire content)
     pub text: Option<String>,
+    /// Set true to publish a draft document
     pub publish: Option<bool>,
 }
 
+/// Parameters for deleting a document
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct DeleteDocumentParams {
+    /// Document identifier to delete
     pub id: String,
+    /// Set true for permanent deletion (cannot be undone). Default: false (moves to trash)
     pub permanent: Option<bool>,
 }
 
+/// Parameters for searching documents
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct SearchDocumentsParams {
+    /// Search terms (searches titles and content)
     pub query: String,
+    /// Limit search to a specific collection
     #[serde(rename = "collectionId")]
     pub collection_id: Option<String>,
+    /// Maximum results to return (default: 25)
     pub limit: Option<u32>,
 }
 
+/// Parameters for listing collections
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct ListCollectionsParams {
+    /// Maximum collections to return (default: 25)
     pub limit: Option<u32>,
+    /// Number of collections to skip for pagination
     pub offset: Option<u32>,
 }
 
+/// Parameters for getting a single collection
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct GetCollectionParams {
+    /// The collection's unique identifier (UUID)
     pub id: String,
 }
 
@@ -123,8 +152,34 @@ impl OutlineServer {
     // Document Tools
     // ========================================================================
 
-    /// List documents in your Outline workspace. Optionally filter by collection ID.
-    #[tool]
+    /// List documents in your Outline workspace.
+    ///
+    /// Use this tool to browse and discover documents. Supports pagination for large workspaces.
+    ///
+    /// Parameters:
+    /// - collectionId (optional): Filter documents to a specific collection. Get collection IDs from outline_collections_list.
+    /// - limit (optional): Maximum number of documents to return. Default is 25.
+    /// - offset (optional): Number of documents to skip for pagination. Use with limit for paging.
+    ///
+    /// Returns: JSON array of document objects, each containing:
+    /// - id: Unique document identifier (use with outline_documents_get)
+    /// - title: Document title
+    /// - emoji: Document emoji icon (if set)
+    /// - createdAt/updatedAt: ISO 8601 timestamps
+    /// - publishedAt: When the document was published (null if draft)
+    /// - collectionId: ID of the containing collection
+    ///
+    /// Example usage patterns:
+    /// - List all documents: Call with no parameters
+    /// - List documents in a collection: {"collectionId": "abc123"}
+    /// - Paginate results: {"limit": 10, "offset": 20}
+    #[tool(annotations(
+        title = "List Documents",
+        read_only_hint = true,
+        destructive_hint = false,
+        idempotent_hint = true,
+        open_world_hint = false
+    ))]
     async fn outline_documents_list(
         &self,
         params: Parameters<ListDocumentsParams>,
@@ -152,8 +207,34 @@ impl OutlineServer {
         Ok(CallToolResult::success(vec![Content::text(json)]))
     }
 
-    /// Get a specific document by ID. Returns the full document including title, text content, and metadata.
-    #[tool]
+    /// Get a specific document by ID.
+    ///
+    /// Retrieves the complete document including full text content. Use this after finding
+    /// a document via outline_documents_list or outline_documents_search.
+    ///
+    /// Parameters:
+    /// - id (required): The document's unique identifier (UUID format)
+    ///
+    /// Returns: JSON object containing:
+    /// - id: Document identifier
+    /// - title: Document title
+    /// - text: Full document content in Markdown format
+    /// - emoji: Document emoji icon (if set)
+    /// - createdAt/updatedAt: ISO 8601 timestamps
+    /// - createdBy: User object of document creator
+    /// - collectionId: ID of the containing collection
+    /// - parentDocumentId: ID of parent document (if nested)
+    /// - publishedAt: Publication timestamp (null if draft)
+    /// - revision: Version number for conflict detection
+    ///
+    /// Example: {"id": "abc123-def456-..."}
+    #[tool(annotations(
+        title = "Get Document",
+        read_only_hint = true,
+        destructive_hint = false,
+        idempotent_hint = true,
+        open_world_hint = false
+    ))]
     async fn outline_documents_get(
         &self,
         params: Parameters<GetDocumentParams>,
@@ -169,8 +250,34 @@ impl OutlineServer {
         Ok(CallToolResult::success(vec![Content::text(json)]))
     }
 
-    /// Create a new document in Outline. Requires title and text content. Optionally set collection ID, parent document, and publish status.
-    #[tool]
+    /// Create a new document in Outline.
+    ///
+    /// Creates a new document with the specified title and content. Documents can be created
+    /// as drafts or published immediately. Can be placed in a collection or nested under
+    /// a parent document.
+    ///
+    /// Parameters:
+    /// - title (required): Document title (appears in navigation and search)
+    /// - text (required): Document content in Markdown format. Supports headings, lists, code blocks, links, images, and tables.
+    /// - collectionId (optional): Place document in a specific collection. Get IDs from outline_collections_list.
+    /// - parentDocumentId (optional): Nest under another document. Creates hierarchical structure.
+    /// - publish (optional): Set to true to publish immediately. Default false creates a draft.
+    ///
+    /// Returns: JSON object containing the created document with:
+    /// - id: New document's unique identifier
+    /// - title, text, emoji, collectionId, parentDocumentId
+    /// - createdAt/updatedAt: ISO 8601 timestamps
+    /// - revision: Initial version number (1)
+    ///
+    /// Example - Create draft: {"title": "Meeting Notes", "text": "# Meeting Notes\n\n## Attendees\n..."}
+    /// Example - Create in collection: {"title": "API Docs", "text": "...", "collectionId": "abc123", "publish": true}
+    #[tool(annotations(
+        title = "Create Document",
+        read_only_hint = false,
+        destructive_hint = false,
+        idempotent_hint = false,
+        open_world_hint = false
+    ))]
     async fn outline_documents_create(
         &self,
         params: Parameters<CreateDocumentParams>,
@@ -197,8 +304,31 @@ impl OutlineServer {
         Ok(CallToolResult::success(vec![Content::text(json)]))
     }
 
-    /// Update an existing document. You can update the title, text content, or publish status.
-    #[tool]
+    /// Update an existing document.
+    ///
+    /// Modifies an existing document's title, content, or publish status. All update fields
+    /// are optional - only specified fields will be changed. Use outline_documents_get first
+    /// to retrieve current content if making partial text edits.
+    ///
+    /// Parameters:
+    /// - id (required): Document identifier to update
+    /// - title (optional): New document title
+    /// - text (optional): New document content in Markdown format. Replaces entire content.
+    /// - publish (optional): Set to true to publish a draft document
+    ///
+    /// Returns: JSON object containing the updated document with all fields
+    ///
+    /// Example - Update title: {"id": "abc123", "title": "New Title"}
+    /// Example - Update content: {"id": "abc123", "text": "# Updated Content\n\nNew text here..."}
+    /// Example - Publish draft: {"id": "abc123", "publish": true}
+    /// Example - Full update: {"id": "abc123", "title": "New Title", "text": "New content", "publish": true}
+    #[tool(annotations(
+        title = "Update Document",
+        read_only_hint = false,
+        destructive_hint = false,
+        idempotent_hint = true,
+        open_world_hint = false
+    ))]
     async fn outline_documents_update(
         &self,
         params: Parameters<UpdateDocumentParams>,
@@ -247,8 +377,31 @@ impl OutlineServer {
         Ok(CallToolResult::success(vec![Content::text(json)]))
     }
 
-    /// Delete a document. By default, moves to trash. Set permanent=true to permanently delete (cannot be undone).
-    #[tool]
+    /// Delete a document from Outline.
+    ///
+    /// Removes a document from the workspace. By default, documents are moved to trash
+    /// where they can be recovered. Use permanent=true for irreversible deletion.
+    ///
+    /// WARNING: Permanent deletion cannot be undone. The document and all its history
+    /// will be lost forever.
+    ///
+    /// Parameters:
+    /// - id (required): Document identifier to delete
+    /// - permanent (optional): Set to true for permanent deletion. Default false moves to trash.
+    ///
+    /// Returns: Success message string:
+    /// - "Document moved to trash" (default behavior)
+    /// - "Document permanently deleted" (when permanent=true)
+    ///
+    /// Example - Move to trash: {"id": "abc123"}
+    /// Example - Permanent delete: {"id": "abc123", "permanent": true}
+    #[tool(annotations(
+        title = "Delete Document",
+        read_only_hint = false,
+        destructive_hint = true,
+        idempotent_hint = true,
+        open_world_hint = false
+    ))]
     async fn outline_documents_delete(
         &self,
         params: Parameters<DeleteDocumentParams>,
@@ -268,8 +421,35 @@ impl OutlineServer {
         Ok(CallToolResult::success(vec![Content::text(message.to_string())]))
     }
 
-    /// Search for documents by text query. Optionally filter by collection ID.
-    #[tool]
+    /// Search for documents by text query.
+    ///
+    /// Full-text search across all documents in your Outline workspace. Searches document
+    /// titles and content. Returns ranked results with context snippets showing matches.
+    ///
+    /// Parameters:
+    /// - query (required): Search terms. Supports natural language queries.
+    /// - collectionId (optional): Limit search to a specific collection
+    /// - limit (optional): Maximum results to return. Default 25.
+    ///
+    /// Returns: JSON object with search results array, each containing:
+    /// - document: Full document object (id, title, text, etc.)
+    /// - ranking: Relevance score
+    /// - context: Text snippet showing where query matched
+    ///
+    /// Tips for effective searching:
+    /// - Use specific terms for precise results
+    /// - Combine multiple keywords to narrow results
+    /// - Search within collections for focused results
+    ///
+    /// Example - Basic search: {"query": "API authentication"}
+    /// Example - Search in collection: {"query": "deployment", "collectionId": "abc123", "limit": 10}
+    #[tool(annotations(
+        title = "Search Documents",
+        read_only_hint = true,
+        destructive_hint = false,
+        idempotent_hint = true,
+        open_world_hint = false
+    ))]
     async fn outline_documents_search(
         &self,
         params: Parameters<SearchDocumentsParams>,
@@ -301,7 +481,32 @@ impl OutlineServer {
     // ========================================================================
 
     /// List all collections in your Outline workspace.
-    #[tool]
+    ///
+    /// Collections are top-level organizational containers for documents. Use this tool
+    /// to discover available collections and get their IDs for filtering document operations.
+    ///
+    /// Parameters:
+    /// - limit (optional): Maximum number of collections to return. Default 25.
+    /// - offset (optional): Number to skip for pagination.
+    ///
+    /// Returns: JSON object with collections array, each containing:
+    /// - id: Collection identifier (use with other tools' collectionId parameter)
+    /// - name: Collection display name
+    /// - description: Collection description (if set)
+    /// - color: Hex color code for UI display
+    /// - icon: Collection icon identifier
+    /// - permission: User's permission level (read, read_write, admin)
+    /// - documentCount: Number of documents in collection
+    ///
+    /// Example - List all: Call with no parameters
+    /// Example - Paginate: {"limit": 10, "offset": 10}
+    #[tool(annotations(
+        title = "List Collections",
+        read_only_hint = true,
+        destructive_hint = false,
+        idempotent_hint = true,
+        open_world_hint = false
+    ))]
     async fn outline_collections_list(
         &self,
         params: Parameters<ListCollectionsParams>,
@@ -322,8 +527,32 @@ impl OutlineServer {
         Ok(CallToolResult::success(vec![Content::text(json)]))
     }
 
-    /// Get a specific collection by ID. Returns collection details and metadata.
-    #[tool]
+    /// Get a specific collection by ID.
+    ///
+    /// Retrieves detailed information about a single collection including its metadata
+    /// and document structure.
+    ///
+    /// Parameters:
+    /// - id (required): Collection identifier (UUID format)
+    ///
+    /// Returns: JSON object containing:
+    /// - id: Collection identifier
+    /// - name: Collection display name
+    /// - description: Collection description
+    /// - color: Hex color code
+    /// - icon: Icon identifier
+    /// - permission: User's permission level
+    /// - documentCount: Total documents in collection
+    /// - createdAt/updatedAt: ISO 8601 timestamps
+    ///
+    /// Example: {"id": "abc123-def456-..."}
+    #[tool(annotations(
+        title = "Get Collection",
+        read_only_hint = true,
+        destructive_hint = false,
+        idempotent_hint = true,
+        open_world_hint = false
+    ))]
     async fn outline_collections_get(
         &self,
         params: Parameters<GetCollectionParams>,
