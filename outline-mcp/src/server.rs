@@ -12,8 +12,54 @@ use rmcp::{
 };
 use rmcp::model::{ErrorCode, ServerInfo, ServerCapabilities, ProtocolVersion, Implementation};
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+
+// ============================================================================
+// Search Response Types (optimized for context limits)
+// ============================================================================
+
+/// Maximum length for document text snippets in search results
+const SNIPPET_MAX_LENGTH: usize = 300;
+
+/// A summarized search result optimized for LLM context limits.
+/// Use outline_documents_get to retrieve full document content.
+#[derive(Debug, Serialize)]
+pub struct SearchResultSummary {
+    /// Document ID - use with outline_documents_get for full content
+    pub id: String,
+    /// Document title
+    pub title: String,
+    /// Relevance score (higher is more relevant)
+    pub ranking: f32,
+    /// Text snippet showing where the query matched
+    pub context: String,
+    /// Truncated preview of document content (first 300 chars)
+    pub snippet: String,
+    /// Full document text (only included if include_content=true)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    /// Collection containing this document
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub collection_id: Option<String>,
+    /// Last updated timestamp
+    pub updated_at: String,
+}
+
+/// Optimized search response with pagination info
+#[derive(Debug, Serialize)]
+pub struct SearchResponse {
+    /// Search results with summarized document info
+    pub results: Vec<SearchResultSummary>,
+    /// Total number of results (if available)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total: Option<u32>,
+    /// Whether more results are available
+    pub has_more: bool,
+    /// Offset for next page (use as offset parameter to get more)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_offset: Option<u32>,
+}
 
 use crate::config::Config;
 
@@ -94,8 +140,15 @@ pub struct SearchDocumentsParams {
     /// Limit search to a specific collection
     #[serde(rename = "collectionId")]
     pub collection_id: Option<String>,
-    /// Maximum results to return (default: 25)
+    /// Maximum results to return (default: 25, max: 100)
     pub limit: Option<u32>,
+    /// Number of results to skip for pagination
+    pub offset: Option<u32>,
+    /// Include full document text in results (default: false).
+    /// When false, only a 300-char snippet is returned to reduce context size.
+    /// Use outline_documents_get to retrieve full content for specific documents.
+    #[serde(default, rename = "includeContent")]
+    pub include_content: bool,
 }
 
 /// Parameters for listing collections
@@ -424,25 +477,40 @@ impl OutlineServer {
     /// Search for documents by text query.
     ///
     /// Full-text search across all documents in your Outline workspace. Searches document
-    /// titles and content. Returns ranked results with context snippets showing matches.
+    /// titles and content. Returns ranked results with context snippets.
+    ///
+    /// **Context Optimization**: By default, only document snippets (300 chars) are returned
+    /// to reduce context size. Use outline_documents_get to retrieve full content for
+    /// specific documents of interest.
     ///
     /// Parameters:
     /// - query (required): Search terms. Supports natural language queries.
     /// - collectionId (optional): Limit search to a specific collection
-    /// - limit (optional): Maximum results to return. Default 25.
+    /// - limit (optional): Maximum results to return. Default 25, max 100.
+    /// - offset (optional): Number of results to skip for pagination.
+    /// - includeContent (optional): Set true to include full document text. Default false.
     ///
-    /// Returns: JSON object with search results array, each containing:
-    /// - document: Full document object (id, title, text, etc.)
-    /// - ranking: Relevance score
-    /// - context: Text snippet showing where query matched
+    /// Returns: JSON object with:
+    /// - results: Array of search results, each containing:
+    ///   - id: Document ID (use with outline_documents_get for full content)
+    ///   - title: Document title
+    ///   - ranking: Relevance score (higher = more relevant)
+    ///   - context: Text snippet showing where query matched
+    ///   - snippet: First 300 chars of document (always included)
+    ///   - text: Full document content (only if includeContent=true)
+    ///   - collection_id: Parent collection ID
+    ///   - updated_at: Last modified timestamp
+    /// - has_more: Whether more results are available
+    /// - next_offset: Offset value for fetching next page
     ///
     /// Tips for effective searching:
     /// - Use specific terms for precise results
-    /// - Combine multiple keywords to narrow results
-    /// - Search within collections for focused results
+    /// - Use pagination (offset) for large result sets
+    /// - Call outline_documents_get for full content of relevant documents
     ///
     /// Example - Basic search: {"query": "API authentication"}
-    /// Example - Search in collection: {"query": "deployment", "collectionId": "abc123", "limit": 10}
+    /// Example - With pagination: {"query": "deployment", "limit": 10, "offset": 10}
+    /// Example - Full content: {"query": "config", "includeContent": true, "limit": 5}
     #[tool(annotations(
         title = "Search Documents",
         read_only_hint = true,
@@ -456,6 +524,9 @@ impl OutlineServer {
     ) -> Result<CallToolResult, ErrorData> {
         let params = params.0;
 
+        // Enforce limits: default 25, max 100
+        let limit = params.limit.unwrap_or(25).min(100);
+
         let request = SearchDocumentsRequest {
             query: params.query,
             collection_id: params.collection_id,
@@ -463,14 +534,53 @@ impl OutlineServer {
             date_filter: None,
             include_archived: None,
             include_drafts: None,
-            offset: None,
-            limit: params.limit,
+            offset: params.offset,
+            limit: Some(limit),
         };
 
         let response = self.client.search_documents(request).await
             .map_err(|e| ErrorData::new(ErrorCode(-32000), e.to_string(), None))?;
 
-        let json = serde_json::to_string_pretty(&response)
+        // Transform results to optimized format
+        let result_count = response.data.len() as u32;
+        let results: Vec<SearchResultSummary> = response.data.into_iter().map(|r| {
+            // Create snippet: first SNIPPET_MAX_LENGTH chars, ending at word boundary
+            let text = &r.document.text;
+            let snippet = if text.len() <= SNIPPET_MAX_LENGTH {
+                text.clone()
+            } else {
+                // Find last space before limit to avoid cutting words
+                let truncate_at = text[..SNIPPET_MAX_LENGTH]
+                    .rfind(|c: char| c.is_whitespace())
+                    .unwrap_or(SNIPPET_MAX_LENGTH);
+                format!("{}...", &text[..truncate_at])
+            };
+
+            SearchResultSummary {
+                id: r.document.id,
+                title: r.document.title,
+                ranking: r.ranking,
+                context: r.context,
+                snippet,
+                text: if params.include_content { Some(r.document.text) } else { None },
+                collection_id: r.document.collection_id,
+                updated_at: r.document.updated_at,
+            }
+        }).collect();
+
+        // Calculate pagination info
+        let current_offset = params.offset.unwrap_or(0);
+        let has_more = result_count >= limit;
+        let next_offset = if has_more { Some(current_offset + result_count) } else { None };
+
+        let search_response = SearchResponse {
+            results,
+            total: None, // Outline API doesn't provide total count
+            has_more,
+            next_offset,
+        };
+
+        let json = serde_json::to_string_pretty(&search_response)
             .map_err(|e| ErrorData::new(ErrorCode(-32000), e.to_string(), None))?;
 
         Ok(CallToolResult::success(vec![Content::text(json)]))
