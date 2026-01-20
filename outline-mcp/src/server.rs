@@ -316,14 +316,20 @@ impl OutlineServer {
     /// - parentDocumentId (optional): Nest under another document. Creates hierarchical structure.
     /// - publish (optional): Set to true to publish immediately. Default false creates a draft.
     ///
+    /// IMPORTANT - Document Links: When linking to other documents, always use the full UUID format:
+    /// [Link Text](/doc/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+    /// Do NOT use the short urlId format. The full UUID creates proper document page connections
+    /// that display as embedded document cards in the Outline UI.
+    ///
     /// Returns: JSON object containing the created document with:
-    /// - id: New document's unique identifier
+    /// - id: New document's unique identifier (use this for document links)
     /// - title, text, emoji, collectionId, parentDocumentId
     /// - createdAt/updatedAt: ISO 8601 timestamps
     /// - revision: Initial version number (1)
     ///
     /// Example - Create draft: {"title": "Meeting Notes", "text": "# Meeting Notes\n\n## Attendees\n..."}
     /// Example - Create in collection: {"title": "API Docs", "text": "...", "collectionId": "abc123", "publish": true}
+    /// Example - Link to another doc: {"title": "Overview", "text": "See [Details](/doc/abc12345-def6-7890-abcd-ef1234567890)"}
     #[tool(annotations(
         title = "Create Document",
         read_only_hint = false,
@@ -368,6 +374,11 @@ impl OutlineServer {
     /// - title (optional): New document title
     /// - text (optional): New document content in Markdown format. Replaces entire content.
     /// - publish (optional): Set to true to publish a draft document
+    ///
+    /// IMPORTANT - Document Links: When linking to other documents, always use the full UUID format:
+    /// [Link Text](/doc/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+    /// Do NOT use the short urlId format. The full UUID creates proper document page connections
+    /// that display as embedded document cards in the Outline UI.
     ///
     /// Returns: JSON object containing the updated document with all fields
     ///
